@@ -228,10 +228,6 @@ JSONObject COG_Base::GetStigNode( $sFormat, $nLevel, $sDirection, $sKind, $sScop
 	$sText = Item( $sText, 1, 1, eoi );
 	$sColor = sGetFlexColor();
 
-	eoi
-	EOI
-	eOi
-
 	$sOrigParentRef = "";
   if ( $oParent != NullObject )
     $sOrigParentRef = $oParent.Ref;

@@ -1,0 +1,3741 @@
+##===========================================================================
+## Copyright � 2011-2018
+## Cognition Corporation, Lexington, MA  USA
+##===========================================================================
+
+##===========================================================================
+## GetIconToUse
+##===========================================================================
+void COG_Base::GetIconToUse( $sHint )
+{
+	sGetIconToUse( $sHint );
+}
+
+
+##===========================================================================
+## sGetIconToUse
+##===========================================================================
+variant COG_Base::sGetIconToUse( $sHint )
+{
+	$sIcon = "";
+	$sThemeFolder = ::sGetThemeFolder();
+	if ($sHint == "18x18")
+	{
+		$sIcon = "Images/" + $sThemeFolder + "/page18x18.png";
+	}
+	else if ($sHint == "24x24")
+	{
+		$sIcon = "Images/" + $sThemeFolder + "/page24x24.png";
+	}
+	else
+	{
+		##When in doubt assume $sHint == "14x14"
+		$sIcon = "Images/" + $sThemeFolder + "/page14x14.png";
+	};
+
+	return $sIcon;
+}
+
+##===========================================================================
+## AccumObjects
+## This procedure is callable from anywhere, but currently used only by
+## loGetObjects( "Custom",... )
+##
+##===========================================================================
+void COG_Base::AccumObjects( $sRequest, $nLevel )
+{
+	## let this level split up the ";"
+	split( $sRequest, ";" )/
+	{
+		$sTmp = trim( * );
+
+		if ( $sTmp != "" )
+		{
+			$loTmp = $this.AccumObjects1( $sTmp, $nLevel );
+		};
+
+		## reset
+		SetThreadContext( "soNoDups0", null );
+		SetThreadContext( "soNoDups1", null );
+		SetThreadContext( "soNoDups2", null );
+		SetThreadContext( "soNoDups3", null );
+		SetThreadContext( "soNoDups4", null );
+		SetThreadContext( "soNoDups5", null );
+		SetThreadContext( "soNoDups6", null );
+		SetThreadContext( "soNoDups7", null );
+		SetThreadContext( "soNoDups8", null );
+		SetThreadContext( "soNoDups9", null );
+	};
+}
+
+##===========================================================================
+## AccumObjects
+##===========================================================================
+void COG_Base::AccumObjects1( $sRequest, $nLevel )
+{
+	## get the first level and remember the rest
+	$sCur	= Item( $sRequest, 1, 1, "/" );
+	$sNext  = Item( $sRequest, 2, 99999999, "/" );
+
+	## let this level split up the "&"
+	split( $sCur, "&" )/
+	{
+		$sTmp = trim( * );
+
+		if ( $sTmp != "" )
+		{
+			$loTmp = $this.AccumObjects2( $sTmp, $nLevel, $sNext );
+		};
+	};
+}
+
+##===========================================================================
+## AccumObjects2
+##===========================================================================
+void COG_Base::AccumObjects2( $sItem, $nLevel, $sNext )
+{
+	## normally we'll only put the last level request in the results and the intermediate
+	## levels are just stepping stones, but if they have a + sign in front of their
+	## kind name, then we'll include them in the results as well
+	$bIncludeInResults = false;
+	$nNextLevel = $nLevel;
+	if ( find( $sItem, "+" ) == 0 )
+	{
+		$bIncludeInResults = true;
+		$sItem = SubStr( $sItem, 1 );
+		$nNextLevel = $nLevel + 1;
+	};
+
+	## Let's get the objects for this level
+	$loTmp = loAccumObjects3( $sItem );
+
+	## repeat this procedure for the rest of the request
+	$loResults = GetThreadContext( "loAccumResults" );
+
+	## get my parents NoDups set. Initialize if necessary
+	$soNoDups = GetThreadContext( "soNoDups" + ( $nLevel-1 ) );
+
+	if ( $soNoDups == null )
+	{
+		$soNoDups = CSet();
+		SetThreadContext( "soNoDups" + ( $nLevel-1 ), $soNoDups );
+	};
+
+	$mooObjectToRequestor = GetThreadContext( "mooObjectToRequestor" );
+	if( $mooObjectToRequestor == NULL )
+	{
+		$mooObjectToRequestor = CMap( CList(), CList() );
+		SetThreadContext( "mooObjectToRequestor", $mooObjectToRequestor );
+	};
+
+	$oParent = *;
+
+	$loTmp/
+	{
+		$bAlreadyInParent = $soNoDups contains *;
+
+		## ouput if requested
+		if ( $bIncludeInResults OR $sNext == "" )
+		{
+			## include yourself in the results if your not already known to your parent
+			if ( NOT $bAlreadyInParent )
+				$loResults << *;
+
+			## Remember the indentation level of the object.
+			## It is not used directly, but some tabledefs may use it to indent their items.
+			## Do not set if already assigned
+			if ( *.GetContext("Level", true) == NULL ) *.SetContext( "Level", $nLevel, true );
+		};
+
+		## This is the huge magic of recursion. Proceed to do the same on the remainder of the request.
+		## Also, prior to calling them, set up who they should use for their duplicates prevention
+		if ( $sNext != "" AND NOT $bAlreadyInParent )
+		{
+			if ( $bIncludeInResults )
+			{
+				## because I will show myself I am going to put
+				## a new set on the "stack" and therefore my lower
+				## objects will use it to prevent themselves from
+				## showing up under me twice
+				SetThreadContext( "soNoDups" + $nLevel, CSet() );
+			}
+			else
+			{
+				## I'm not showing myself so my children should use my parents
+				## set of objects to prevent dups
+				SetThreadContext( "soNoDups" + $nLevel, $soNoDups );
+			};
+
+			$oThis = *;
+			if( $sItem == "this" or $sItem == "This" )
+				$mooObjectToRequestor << CMap( $oThis, $oThis );
+			else
+				$mooObjectToRequestor << CMap( $oThis, $oParent );
+
+			SetThreadContext( "mooObjectToRequestor", $mooObjectToRequestor );
+
+			AccumObjects1( $sNext, $nNextLevel );
+
+			$mooObjectToRequestor = GetThreadContext( "mooObjectToRequestor" );
+			if( $mooObjectToRequestor == NULL )
+			{
+				$mooObjectToRequestor = CMap( CList(), CList() );
+			};
+		}
+		else
+		{
+			##make sure the bottom level still gets recorded
+			$oThis = *;
+			if( $sItem == "this" or $sItem == "This" )
+				$mooObjectToRequestor << CMap( $oThis, $oThis );
+			else
+				$mooObjectToRequestor << CMap( $oThis, $oParent );
+
+			SetThreadContext( "mooObjectToRequestor", $mooObjectToRequestor );
+		};
+
+		## whether we actually output ourselves or not, let your parent know about it so he won't visit us again
+		$soNoDups << *;
+	};
+
+	SetThreadContext( "mooObjectToRequestor", $mooObjectToRequestor );
+}
+
+##===========================================================================
+## loAccumObjects3
+## THIS FUNCTION IS OVERRIDDEN AT LOWER LEVELS UNLIKE THE OTHER loAccumObjects
+##===========================================================================
+variant COG_Base::loAccumObjects3( $sItem )
+{
+	$loObjects = CList();
+
+	## now deal with what we have
+	if ( $sItem == "this" or $sItem == "This" )
+	{
+		$loObjects << $this;
+	}
+	else
+	{
+		$nItems = ItemCount( $sItem, "," );
+		switch ( $nItems )
+		{
+			case 1:
+				$sKindTmp = trim( Item( $sItem, 1, 1, "," ) );
+				$sScopeTmp = "Children";
+				$sFilterTmp = "";
+				break;
+
+			case 2:
+				$sKindTmp = trim( Item( $sItem, 1, 1, "," ) );
+				$sScopeTmp = trim( Item( $sItem, 2, 2, "," ) );
+				$sFilterTmp = "";
+				break;
+
+			case 3:
+				$sKindTmp = trim( Item( $sItem, 1, 1, "," ) );
+				$sScopeTmp = trim( Item( $sItem, 2, 2, "," ) );
+				$sFilterTmp = trim( Item( $sItem, 3, 3, "," ) );
+				break;
+		};
+
+		if ( $sKindTmp == "Custom" )
+			throw( "Cannot use a custom loGetObjects call inside a custom request." );
+
+		$sScopeTmp = $sScopeTmp=="" ? "Children" : $sScopeTmp;
+
+		$loObjects << $this.loGetObjects( $sKindTmp, $sScopeTmp );
+
+		## now filter them being as friendly as you can
+		if ( $sFilterTmp != "" )
+		{
+			## Add class if not already there
+			if  (itemcount($sFilterTmp,EOI) < 2)
+			{
+				$sClassName = $this.sGetClassNameFromRequest( $sKindTmp );
+				$sFilterRequest = $sFilterTmp + eoi + $sClassName;
+			} else
+				$sFilterRequest = $sFilterTmp;
+			$lsFilters = $this.GetFilter( $sFilterRequest );
+
+			## if it is still empty, but they gave us something, then let's assume it is a SINGLE filter expression
+			if ( IsEmpty( $lsFilters ) )
+			{
+				$lsFilters << $sFilterTmp;
+			};
+
+			$loObjects = $this.loFilterList( $loObjects, $lsFilters, true );
+		};
+
+	};
+
+	## return
+	return $loObjects;
+}
+
+##===========================================================================
+## sFakeCenterLink - you can specify style class also
+##===========================================================================
+variant COG_Base::sFakeCenterLink( $sText, $sKey, $sShowingWhat, $sCssClass )
+{
+	$sRef = Ref;
+
+	$sResponse =  "<" + "span class='" + $sCssClass + "' target='CenterPage' bUpdateText='true' ";
+	$sResponse += " subscription='~ReqDisplayModeChanged~' href='GetFakePage.ase?oThis=" + $sRef;
+	$sResponse += "&sShowingWhat="+ $sShowingWhat + "&sKey=" + $sKey;
+	if( $sKey == "Preferences" )
+		$sResponse += "&bUpdateTxn=true";
+
+	$sResponse += "' sShowingWhat='" + $sShowingWhat + "' ";
+	$sResponse += " sKey='" + $sKey + "' ";
+	$sResponse += " >" + htmlencode($sText) + "</span" +  ">";
+	return $sResponse;
+}
+
+
+##===========================================================================
+## sGetStickyNoteColor
+##===========================================================================
+variant COG_Base::sGetStickyNoteColor()
+{
+	return "transparent";
+}
+##===========================================================================
+## sGetRichEditableText
+##
+##Inputs: The request ID, a bool flag of whether or not it should be editable,
+##and a string of the extra HTML tags/attributes that will be added on (right now,
+##this is usually just the validation tag.)
+##		NOTE: sTagAttrs MUST be passed to the function in the correct HTML format
+## of tagName = value for them to work properly.
+##
+##Outputs: Generates a div and returns it to the caller
+##===========================================================================
+variant COG_Base::sGetRichEditableText($sRequest,$bEdit,$sTagAttrs)
+{
+	return sGetRichEditableText( $sRequest, $bEdit, $sTagAttrs, "PROPERTY", "" );
+}
+variant COG_Base::sGetRichEditableText($sRequest,$bEdit,$sTagAttrs, $sKindOfChange )
+{
+	return sGetRichEditableText( $sRequest, $bEdit, $sTagAttrs, "PROPERTY", "" );
+}
+##===========================================================================
+## sGetRichEditableText
+##
+##Inputs: The request ID, a bool flag of whether or not it should be editable,
+##and a string of the extra HTML tags/attributes that will be added on (right now,
+##this is usually just the validation tag.)
+##		NOTE: sTagAttrs MUST be passed to the function in the correct HTML format
+## of tagName = value for them to work properly.
+##
+##Outputs: Generates a div and returns it to the caller
+##===========================================================================
+variant COG_Base::sGetRichEditableText( $sRequest, $bEdit, $sTagAttrs, $sKindOfChange, $sHints  )
+{
+	$sRef = *.Ref;
+
+	$sResponse = CStr( sGetData( $sRequest ) );
+
+	$sExport = GetRequest( "sExport" );
+	## if exporting or readonly, then return simple text
+	$bExport = $sExport != NULL;
+
+	## allow the edit test to be "specialized"
+	if ( $sHints != "" )
+		$bIsEditable = bIsEditable( $sHints );
+	else
+		$bIsEditable = bIsEditable();
+
+	if( $bEdit==false or $bExport or NOT $bIsEditable ){
+		## RegEx finds and removes the dblclick event from any embedded apps. Searches for the string
+		## ondblclick="javascript:if(window.oGetTop)oGetTop().OpenExtApp( '<%$sAppLink%>', 'ExtAppInfo', false )"
+		## where <%$sAppLink%> is a value we do not know so we use [^']* for any characters except the end quote.
+		## Search string is based off value in SSC_DBObj::RunCommandHandler's case "SaveEmbeddedApp".
+		$sTemp = $sResponse ~ "s/ondblclick=""javascript:if\(window\.oGetTop\)oGetTop\(\)\.OpenExtApp\( '[^']*', 'ExtAppInfo', false \)""/ /ig";
+
+		if( $sExport == "Review" )
+		{
+			$sValue = $sTemp;
+			$sNameID = 'sGetName/ID'();
+			$sClassname = classname;
+			$sTemp = "<span class='ReviewDataField' sNameID='" + $sNameID + "' sClassname='" + $sClassname + "' sRequest='" + HTMLEncode($sRequest) + "' bNoEOISplit=true >";
+			$sTemp += $sValue + "</span>";
+		}
+	}
+	else
+	{
+		$sIsPLE = Lower( CStr( $this.bIsPLE() ) );
+		## otherwise, return a nice tag
+		$sTemp =	"<div class='RichEditableText' contentEditable='true' " + $sTagAttrs + " sRef='" + $sRef + "' ";
+		$sTemp +=	"bIsPLE='" + $sIsPLE + "' sItem='" + HTMLEncode($sRequest) + "' sValue='' >";
+		$sTemp +=	$sResponse + "</div>";
+	};
+
+	$bIncorporate = GetRequest( "bReviewIncorporateView" );
+	$bIncorporate = $bIncorporate == null ? false : CBool( $bIncorporate );
+	if( $bIncorporate )
+	{
+		$sValue = $sTemp;
+		$sNameID = 'sGetName/ID'();
+		$sClassname = classname;
+		$sSafeRequest = Replace( $sRequest, EOI, "EOI" );
+		$sASE = "sGetRichEditableText(""" + $sRequest + """, """ + $bEdit + """, """ + $sTagAttrs + """, """ + $sKindOfChange + """, """ + $sHints + """ );";
+		$sURLParams = "";
+		if( $sExport != Null )
+			$sURLParams += "&sExport=" + $sExport;
+		$sTemp  = "<span class='Incorporate_" + $sNameID + "_" + $sClassname + "_" + HTMLEncode($sSafeRequest) + "'";
+		$sTemp += " sType='ASE' sASE='" + htmlencode($sASE) + "' sURLParams='" + $sURLParams + "' >";
+		$sTemp += $sValue + "</span>";
+	};
+
+	return $sTemp;
+}
+##===========================================================================
+## lsGetAllowedAssociations
+##===========================================================================
+variant COG_Base::lsGetAllowedAssociations()
+{
+	return lsGetAllowedAssociations_Builtin();
+}
+##===========================================================================
+## lsGetAllowedAssociations_Builtin
+##===========================================================================
+variant COG_Base::lsGetAllowedAssociations_Builtin()
+{
+	return CList();
+}
+##===========================================================================
+## lsGetDirectRelationships
+##===========================================================================
+variant COG_Base::lsGetDirectRelationships()
+{
+	return lsGetDirectRelationships_Builtin();
+}
+##===========================================================================
+## lsGetDirectRelationships_Builtin
+##===========================================================================
+variant COG_Base::lsGetDirectRelationships_Builtin()
+{
+	return CList();
+}
+
+##===========================================================================
+## RepairReportDef
+##
+##===========================================================================
+variant COG_Base::RepairReportDef( $lsReportDef )
+{
+	$vsReportDef = CVector( $lsReportDef );
+
+	while( Count( $vsReportDef ) != 6 )
+	{
+		$vsReportDef << "";
+	};
+
+	$lsReportDef = CList();
+
+	for( $i = 0; $i != Count( $vsReportDef ); $i += 1 )
+	{
+		$sCurr = pick( $vsReportDef, $i );
+
+		switch( $i )
+		{
+			case 0:
+				##Display name
+				$lsReportDef << $sCurr;
+				break;
+			case 1:
+				## numeric state flag
+				if( ::isReal( $sCurr ) )
+					$lsReportDef << $sCurr;
+				else
+					$lsReportDef << 0;
+				break;
+			case 2:
+				## request
+				$lsReportDef << $sCurr;
+				break;
+			case 3:
+				## first cell id to focus on
+				$lsReportDef << $sCurr;
+				break;
+			case 4:
+				## update txn needed
+				$lsReportDef << $sCurr;
+				break;
+			case 5:
+				## visible when parameters
+				$lsReportDef << $sCurr;
+				break;
+
+		};
+	};
+	return $lsReportDef;
+}
+##================================================================================================================================
+## lsGetAvailableReports
+##
+##NOTE: [Group display name;]display name|0 = go right to report, 1 = display prompt first|report name| if a prompt is needed, the id of the first field|need update txn|Available When?
+##==================================================================================================================================
+variant COG_Base::lsGetAvailableReports_Builtin( )
+{
+	$lsRetval = CList();
+
+	return $lsRetval;
+}
+##===========================================================================
+## sGetFakeText
+##===========================================================================
+variant COG_Base::sGetFakeText($sKey,$sTitle)
+{
+
+	$sRetval = "<span class='FT_FakeNodeNonEditText'  target='body' href='GetFakeBodyPage.ase?sKey='" + $sKey + "&sTitle=" + $sTitle + "'>";
+	$sRetval += htmlencode($sTitle);
+	$sRetval += "</span>";
+	return $sRetval;
+}
+#*!***************************************************************************************************
+ * <summary>
+ * 	Generates the trace report header including export links
+ * </summary>
+ * <visibility>
+ *
+ * </visibility>
+ * <param name="$sTitle" type="String">the title of the report</param>
+*****************************************************************************************************#
+void COG_Base::TraceReportHeader( $sTitle )
+{
+	if( GetRequest( "sExport" ) == NULL )
+	{
+		$bWindows = $dao.Context.Get( "bWindows" );
+		#inline
+		<div style = "font-family:verdana;text-align:center;color:#666666;" >
+			<span style="font-weight:bold;"><%$sTitle%></span>
+		#endinline;
+
+		if ( $bWindows ) {
+			#inline
+			<span class='noprint ActionLink' style = "cursor:pointer;margin-left:10px;font-family:verdana;text-align:center;font-size:7pt;text-decoration:underline;"
+					onClick = "top.ExportToExcel( window.location );">Excel</span>
+			#endinline;
+		};
+		#inline
+			<span class='noprint ActionLink' style = "cursor:pointer;margin-left:10px;font-family:verdana;text-align:center;font-size:7pt;text-decoration:underline;"
+					onClick = "top.ExportReportToWord( window.location, event );">Word</span>
+			<span class='noprint ActionLink' style = "cursor:pointer;margin-left:10px;font-family:verdana;text-align:center;font-size:7pt;text-decoration:underline;"
+					onClick = "top.printCenterPage()">Print</span>
+			<span class='noprint ActionLink' style = "cursor:pointer;margin-left:10px;font-family:verdana;text-align:center;font-size:7pt;text-decoration:underline;"
+					onClick = "window.location = 'GetPage.ase?oThis=<%Ref%>&sShowingWhat=Reports';">Close</span>
+		</div>
+		<br>
+		#endinline;
+	}
+	else
+	{
+		#inline
+		<div style = "font-family:verdana;text-align:center;color:#666666;" >
+			<span style="font-weight:bold;"><%$sTitle%></span>
+		</div>
+		#endinline;
+	};
+
+}
+##===========================================================================
+## RepairSectionDef
+##
+##===========================================================================
+variant COG_Base::RepairSectionDef( $lsSectionDef )
+{
+	$vsSectionDef = CVector( $lsSectionDef );
+
+	while( Count( $vsSectionDef ) != 9 )
+	{
+		$vsSectionDef << "";
+	};
+
+	$lsSectionDef = CList();
+
+	for( $i = 0; $i != Count( $vsSectionDef ); $i += 1 )
+	{
+		$sCurr = pick( $vsSectionDef, $i );
+
+		switch( $i )
+		{
+			case 0:
+				##Display
+				if( $sCurr != "" )
+					$lsSectionDef << $sCurr;
+				else
+					$lsSectionDef << "New Section";
+				break;
+			case 1:
+				## numeric state flag
+				if( ::isReal( $sCurr ) OR ( CInt( $sCurr ) == 0 ) )
+					$lsSectionDef << $sCurr;
+				else
+					$lsSectionDef << 1;
+				break;
+			case 2:
+				## request
+				$lsSectionDef << $sCurr;
+				break;
+			case 3:
+				## linker params
+				if( $sCurr != "" )
+					$lsSectionDef << $sCurr;
+				else
+					$lsSectionDef << "Child_None";
+				break;
+			case 4:
+				## numeric type flag
+				if( ::isReal( $sCurr ) )
+					$lsSectionDef << $sCurr;
+				else
+					$lsSectionDef << 0;
+				break;
+			case 5:
+				## filter
+				$lsSectionDef << $sCurr;
+				break;
+			case 6:
+				## grouping
+				$lsSectionDef << $sCurr;
+				break;
+			case 7:
+				## format
+				$lsSectionDef << $sCurr;
+				break;
+			case 8:
+				## visibility parameters
+				$lsSectionDef << $sCurr;
+				break;
+		};
+	};
+	return $lsSectionDef;
+}
+##===========================================================================
+## RepairFormDef
+##
+##===========================================================================
+variant COG_Base::RepairFormDef( $lsFormDef )
+{
+	$vsFormDef = CVector( $lsFormDef );
+
+	while( Count( $vsFormDef ) != 4 )
+	{
+		$vsFormDef << "";
+	};
+
+	$lsFormDef = CList();
+
+	for( $i = 0; $i != Count( $vsFormDef ); $i += 1 )
+	{
+		$sCurr = pick( $vsFormDef, $i );
+
+		switch( $i )
+		{
+			case 0:
+				##Display
+				$lsFormDef << $sCurr;
+				break;
+			case 1:
+				##request
+				$lsFormDef << $sCurr;
+				break;
+			case 2:
+				## Editable flag
+				if( Lower( $sCurr ) != "true" )
+					$lsFormDef << "false";
+				else
+					$lsFormDef << $sCurr;
+				break;
+			case 3:
+				$lsFormDef << $sCurr;
+				break;
+		};
+	};
+	return $lsFormDef;
+}
+##==========================================================
+## loAlphaSortByDescription
+##
+##==========================================================
+variant COG_Base::loAlphaSortByDescription( $loObjects )
+{
+	return loSortObjects( $loObjects, "sDescription", false, false );
+}
+
+##==========================================================
+## loSortObjects
+##
+##==========================================================
+variant COG_Base::loSortObjects( $loObjects, $sSortRequest, $bNumeric, $bReverse )
+{
+
+	if( $bNumeric )
+		$loSorted = loSortObjects_Numeric( $loObjects, $sSortRequest );
+	else
+		$loSorted = loSortObjects_String( $loObjects, $sSortRequest );
+
+	if( $bReverse )
+		$loSorted = GetReverse( $loSorted );
+
+	return $loSorted;
+}
+##==========================================================
+## loSortObjects
+##
+##==========================================================
+variant COG_Base::loSortObjects_String( $loObjects, $sSortRequest)
+{
+	$lsSortRequests = split( $sSortRequest, "," );
+
+	$loRetval = CList();
+	if( NOT IsEmpty( $loObjects ) )
+	{
+		## construct a map, then pull out groups of objects in alpha order to add to the return
+		## list
+		$lsKeys = CList();
+		$loObjects/
+		{
+			$oObj = *;
+			$lsCurr = CList();
+
+			$lsSortRequests/
+			{
+				$sCurrRequest = *;
+				$sData = CStr( $oObj.sGetValue( Trim( $sCurrRequest ) ) );
+
+				$lsCurr << Lower( $sData );
+
+			};
+
+			$sKey = Join( $lsCurr, EOI );
+			$lsKeys << $sKey;
+		};
+
+		$msoObjects = CMap( $lsKeys, $loObjects );
+
+		$lsKeys = GetSorted( GetUnique( GetKeys( $msoObjects ) ) );
+
+		$lsKeys/
+		{
+			$loCurr = pickrange( $msoObjects, *, * );
+			$loRetval << $loCurr;
+		};
+	};
+	return $loRetval;
+}
+##==========================================================
+## loSortObjects
+##
+##==========================================================
+variant COG_Base::loSortObjects_Numeric( $loObjects, $sSortRequest )
+{
+	$lsSortRequests = split( $sSortRequest, "," );
+	$loCurrObjects = $loObjects;
+
+	if( NOT IsEmpty( $loObjects ) )
+	{
+		##for numeric sorts we have to sort each sort request individually
+
+		$mnoKeyToObject = CMap( CList(), CList(), False );
+
+		$lsSortRequests/
+		{
+			$sCurrRequest = *;
+
+			$loCurrObjects/
+			{
+				$oObj = *;
+				$sData = CStr( $oObj.sGetValue( Trim( $sCurrRequest ) ) );
+
+				try
+				{
+					$nData = CReal( $sData );
+				}
+				catch( $sErr )
+				{
+					$nData = 0;
+				};
+
+				$mnoKeyToObject << CMap( $nData, $oObj );
+
+			};
+
+			## set the list equal to the newly sorted list, then clear the map
+			$loCurrObjects = CList();
+
+			$lsKeys = GetKeys( $mnoKeyToObject );
+			$lsKeys = GetUnique( $lsKeys, true );
+
+			$lsKeys/
+			{
+				$loCurrObjects << pickrange( $mnoKeyToObject, *, * );
+			};
+
+			$mnoKeyToObject = CMap( CList(), CList(), False );
+
+		};
+
+	};
+
+	return $loCurrObjects;
+}
+##==========================================================
+##	GetHelpTree
+##
+## Encoding is as follows:
+## NODE iLevel
+## sTitle=$sTitle
+## sUrl=$sUrl
+## CHILDREN iLevel
+##		....
+## /CHILDREN iLevel
+## /NODE iLevel
+## NODE iLevel
+## ...
+## ...
+##============================================================
+void COG_Base::GetHelpTree( $vsEncoding, $nLevelsToShow )
+{
+	if( NOT IsEmpty( $vsEncoding ) )
+	{
+		$nStart = 0;
+		$sCurrNodeStart = First( $vsEncoding );
+		$nCurr = 1;
+		$nSize = Count( $vsEncoding );
+		while( $nCurr != $nSize )
+		{
+
+			$sCurr = pick( $vsEncoding, $nCurr );
+			if( $sCurr == ("/" + $sCurrNodeStart ) )
+			{
+				COG_Base::GetHelpTreeNode( pickrange( $vsEncoding, $nStart, $nCurr ), $nLevelsToShow );
+
+				$nStart = $nCurr + 1;
+				if( $nStart != $nSize )
+					$sCurrNodeStart = pick( $vsEncoding, $nStart );
+			};
+			$nCurr = $nCurr + 1;
+		};
+	};
+}
+##==========================================================
+##	GetHelpTreeNode
+##
+## Encoding is as follows:
+## NODE iLevel
+## sTitle=$sTitle
+## sUrl=$sUrl
+## CHILDREN iLevel
+##		....
+## /CHILDREN iLevel
+## /NODE iLevell
+##============================================================
+void COG_Base::GetHelpTreeNode( $vsEncoding, $nLevelsToShow )
+{
+
+	$sNode = Item( First( $vsEncoding ), 2, 2, " " );
+	$nLevel = CInt( $sNode );
+
+	$sDisplay = "block";
+	$bExpanded = true;
+
+	if(	$nLevel >= $nLevelsToShow )
+	{
+		$sDisplay = "none";
+		$bExpanded = false;
+	};
+
+	$sTitle = Item( pick( $vsEncoding, 1 ), 2, 2, "=" );
+	$sUrl = Item( pick( $vsEncoding, 2 ), 2, 99, "=" );
+
+	$sHeader = COG_Base::GetHelpTreeText( $sTitle, $sUrl );
+
+	$bEmpty = false;
+
+	## True if Children is empty
+	if( count( $vsEncoding ) == 6 )
+		$bEmpty = true;
+
+	$sCursor = "default";
+	$sThemeFolder = ::sGetThemeFolder();
+	$sPlusMinus = "Images/" + $sThemeFolder;
+	if ( not $bEmpty )
+	{
+		$sPlusMinus += $bExpanded ? "/minus.gif" : "/plus.gif";
+		$sCursor = "pointer";
+	}
+	else
+	{
+		$sPlusMinus += "/empty.gif";
+	};
+
+	##IE standards needs a smaller value for the nodeicon margin, otherwise icons get cut off.
+	$sMarginAdjust = "";
+	$bCompOn = GetDaoContext("bCompOn");
+	if(NOT $bCompOn){
+		$sMarginAdjust = "margin-top:0px;";
+	};
+
+	#inline
+	<div class="FT_Node" sTopic='<%$sTitle%>' ondrop="top.FT_StartDrop(event);" ondragenter="top.FT_onDragEnter(event);"
+		ondragover="top.FT_onDragEnter(event);"  ondragleave="top.FT_ondragleave(event);" bAdminEntry=true>
+		<img  class=FT_PlusMinus  src=<%$sPlusMinus%> style="cursor:<%$sCursor%>" onclick="top.Expandable_OnClick(this)" ondragstart="top.Expandable_OnDragStart(event)"/>
+		<img class=Help_NodeIcon  src="Images/<% $sThemeFolder %>/page14x14.png" target='body' href='<%$sUrl%>' onclick="top.link( this.getAttribute('href'), 'help' )" style="<% $sMarginAdjust %>"/>
+		<span id="holder" onclick="top.link( '<% $sUrl %>', 'help' )" ><%$sHeader%></span>
+		<div class=FT_Tree fetched='true' style="display:<%$sDisplay%>;">
+			#endinline;
+
+			if( not $bEmpty )
+			{
+				$lsChildren = pickrange( $vsEncoding, 4, Count( $vsEncoding ) -3 );
+
+				COG_Base::GetHelpTree( $lsChildren, $nLevelsToShow );
+
+			};
+
+			## close my tags
+			#inline
+		</div>
+	</div>
+	#endinline;
+
+
+
+}
+
+##===========================================================================
+## sGetFakeText
+##===========================================================================
+variant COG_Base::GetHelpTreeText( $sTitle, $sUrl )
+{
+
+	$sRetval = "<span class='link' target='body' href='" + $sUrl + "'>";
+	$sRetval += $sTitle;
+	$sRetval += "</span>";
+	return $sRetval;
+}
+##===========================================================================
+## StandardReportTable
+##===========================================================================
+void COG_Base::StandardReportTable( $loItems, $lsTableDef, $sStyle )
+{
+	## initialize vectors
+	$vsColumns = CVector();
+	$vsHeadings = CVector();
+	$vsStyles = CVector();
+
+	## go through table definitions and divide up data
+	$lsTableDef/
+	{
+		$sDef = *;
+		$vsDef = split( $sDef, "|" );
+
+		$vsColumns << Pick( $vsDef, 0 );
+		$vsHeadings << Pick( $vsDef, 1 );
+		$vsStyles << Pick( $vsDef, 2 );
+	};
+
+	#inline
+	<style type="text/css">
+ 	TABLE { font-family: Verdana; font-size: 11px; border-collapse: collapse; border:thin solid black; cellspacing:0; cellpadding:1;}
+ 	TD { border:thin solid black;}
+ 	TH { border:thin solid black; background-color:#CCCCCC;}
+ 	</style>
+	<table>
+	#endinline;
+
+	#inline
+	<tr>
+	#endinline;
+
+	$vsHeadings/
+	{
+		$sHeading = *;
+		#inline
+		<th><%$sHeading%></th>
+		#endinline;
+	};
+
+	#inline
+	</tr>
+	#endinline;
+
+	$loItems/
+	{
+		$oObj = *;
+
+		"<tr>";
+
+		$vsColumns/
+		{
+			$sKey = *;
+			$sData = $oObj.sGetData( $sKey );
+
+			$sLeft = lower( left( $sData, 5 ) );
+			if ($sLeft == "error") $sData = "";
+
+			#inline
+			<td><%$sData%></td>
+			#endinline;
+		};
+
+		"</tr>";
+	};
+
+	#inline
+	</table>
+	#endinline;
+}
+##===========================================================================
+## GetReportLink
+##===========================================================================
+
+#*!***************************************************************************************************
+ * <summary>
+ * 	Generates the style definition for the status summary
+ * </summary>
+ * <visibility>
+ *
+ * </visibility>
+*****************************************************************************************************#
+void COG_Base::GetStatusSummaryStyle()
+{
+	#inline
+	<style type="text/css">
+		.FT_Status_Table
+		{
+			color:black;
+			table-layout:fixed;
+			/*IE 10 Problem - Expressions not supported*/
+			width: expression( document.documentElement.clientWidth );
+			border-collapse: collapse;
+			empty-cells:show;
+			font-family: Arial;
+			font-size: 8pt;
+			border: 1px solid gray;
+			word-wrap:break-word;
+
+		}
+
+		.FT_Status_Header
+		{
+			color:black;
+			height: 18px;
+			font-weight: bold;
+			background-color:#CCCCCC;
+			border: 1px solid gray;
+			vertical-align: bottom;
+		}
+
+		.FT_Status_Cell
+		{
+			border: 1px solid gray;
+		}
+
+	</style>
+	<style media='print'>
+		.FT_Status_Table
+		{
+			color:black;
+			table-layout:fixed;
+			width: 100%;
+			border-collapse: collapse;
+			empty-cells:show;
+			font-family: Arial;
+			font-size: 8pt;
+			border: 1px solid gray;
+			word-wrap:break-word;
+
+		}
+
+		.FT_Status_Header
+		{
+			color:black
+			height: 18px;
+			font-weight: bold;
+			background-color:#CCCCCC;
+			border: 1px solid gray;
+			vertical-align: bottom;
+		}
+
+		.FT_Status_Cell
+		{
+			border: 1px solid gray;
+		}
+		.noprint
+		{
+			display:none;
+		}
+
+	</style>
+	<% JQueryEventsLimited("Status" ); %>
+	#endinline;
+}
+##===================================================================================================================
+## oFindIndirectObject
+##
+## Returns either null object or the subItem with the given key
+##===================================================================================================================
+variant COG_Base::oFindIndirectObject( $sKey )
+{
+	return NULLOBJECT;
+}
+
+##===================================================================================================================
+## bIsAvailable
+##
+## Returns either null object or the subItem with the given sSubType
+##===================================================================================================================
+variant COG_Base::bIsAvailable( $obj )
+{
+	## check for nullobject
+	if ( $obj == NULLOBJECT )
+	{
+		$bValid = false;
+	}
+	else
+	{
+		try
+		{
+			$iOid = $obj.iOid;
+			$bValid = true;
+		}
+		catch( $err )
+		{
+			$bValid = false;
+		};
+	};
+
+	return $bValid;
+
+}
+##===========================================================================
+## GetFakeFlexTable
+##===========================================================================
+void COG_Base::GetFakeFlexTable( $sKey )
+{
+	$oThis = *;
+	$sRef = Ref;
+
+	#inline
+		<div sKey='<%$sKey%>' sRequest='<%$sKey%>' sShowingWhat='<%$sKey%>' id = '<% Ref + $sKey %>' sRef='<%$oThis.Ref%>' class='FT_Master' subscription='<%$sRef + $sKey%>~onRefresh~' bFake=true >
+	#endinline;
+
+	JSONArray $jaTableRows = jaGetTableRows( $sKey );
+	if( $jaTableRows.IsEmpty() )
+	{
+		#inline
+		<span style = 'font-family:verdana;color:#666666;'>None.</span>
+		</div>
+		#endinline;
+		return;
+	};
+
+	#inline
+	<table id = 'flexTable' class=FT_Table cellpadding="0px" cellspacing="0" style="text-align:left;" onclick = "top.ClosePopout(this)" >
+	#endinline;
+
+	$lsTableDef = lsGetFakeTableDef($sKey);
+
+	$vsCols = CVector();
+	$vsCellStyles = CVector();
+	$vsAllowEdit = CVector();
+
+	#inline
+	<tr>
+	#endinline;
+	$lsTableDef/
+	{
+		$vsRowDef = split( *, "|" );
+
+		$sTitle =  pick( $vsRowDef, 1 );
+		$sHeaderStyle =  pick( $vsRowDef, 2 );
+
+		$sClass = "class='FT_Header'";
+
+		#inline
+			<th <%$sClass%>  style="text-align:left;<%$sHeaderStyle%>"><%$sTitle%></th>
+		#endinline;
+
+		$sCurrCol = pick( $vsRowDef, 0 );
+		$vsCols << $sCurrCol;
+		$vsCellStyles << pick( $vsRowDef, 3 );
+		$vsAllowEdit <<  pick( $vsRowDef, 4 );
+
+	};
+	"</tr>";
+
+
+	SetRequest( "iEnd", $jaTableRows.Size() -1 );
+
+	$jaTableRows/
+	{
+		SetRequest( "iIternum", $iternum );
+		JSONObject $joCurr = *;
+		"<tr class='FT_Row' >";
+		$oThis.GetFakeFlexTableEntry($joCurr, $vsCols, $vsCellStyles, $vsAllowEdit);
+		"</tr>";
+	};
+	SetRequest( "iIternum", NULL );
+	SetRequest( "iEnd", NULL );
+
+	#inline
+	</table>
+	</div>
+	#endinline;
+}
+
+##===========================================================================
+## GetFakeFlexTableEntry
+##===========================================================================
+void COG_Base::GetFakeFlexTableEntry(JSONObject $joData, $vsCols, $vsCellStyles, $vsAllowEdit)
+{
+	$oThis = *;
+	$sKey = $joData.Get("sRef");
+
+	$vsCols/
+	{
+
+		$sRequest = *;
+		$sStyle = "";
+
+
+
+		$sCellStyle = pick( $vsCellStyles, $iternum );
+
+		$sAllowEdit = pick( $vsAllowEdit, $iternum );
+
+
+
+		##$sAllowEdit is actually a bool;string pair
+		$vsTemp = split($sAllowEdit,";");
+
+		$sAllowEdit = pick($vsTemp,0);
+
+		##$sTags always exists, even if $sAllowEdit is false, so this should never throw an error
+		$sTags = pick($vsTemp,1);
+
+		$bMakeEditable = $sAllowEdit == "true" ? true : false;
+
+
+
+
+		#inline
+		<td class='FT_Cell' sShowingWhat ='<%$sRequest%>' vAlign = "top" style="<%$sStyle + $sCellStyle%>">
+		#endinline;
+			if($sKey != NULL)
+			{
+				$sChoiceKey = $joData.Get( "ChoiceKey|" + $sRequest );
+				if( $sChoiceKey != NULL )
+					$oThis.DropList( $sRequest + EOI + $sKey, $sChoiceKey, "Value here..." );
+				else
+				{
+					SetRequest( "bMakeEditable", $bMakeEditable );
+					SetRequest( "sTags", $sTags );
+					$oThis.GetFakeSnippet( $sRequest + EOI + $sKey );
+				};
+			}
+			else
+			{
+				$sData = $joData.Get( $sRequest );
+				if($sData == NULL)
+					$sData = "";
+				$sData;
+			};
+		#inline
+		</td>
+		#endinline;
+
+	};
+}
+##=================================================================================
+## sGetFakeFlexTableCell
+##
+## If any cells need special formatting, like drop downs or edit in place, the code
+## for that goes here.
+##=================================================================================
+void COG_Base::sGetFakeFlexTableCell($sData,$sRequest,$bMakeEditable,$sTags)
+{
+	switch($sRequest)
+	{
+		default:
+			$sData;
+			break;
+	};
+}
+##===========================================================================
+## lsGetFakeTableDef
+##===========================================================================
+variant COG_Base::lsGetFakeTableDef($sKey)
+{
+	$sSubKey = "";
+	if ( find( $sKey, "_" ) != -1 )
+	{
+		$iItemCnt = ItemCount( $sKey, "_" );
+		$sSubKey = "_" + Item( $sKey, 2, $iItemCnt, "_" );
+		$sKey = Item( $sKey, 1, 1, "_" );
+	};
+
+	$lsRetval = CList();
+	switch($sKey)
+	{
+
+	    default:
+			$lsRetval << "||width:100%;||";
+			break;
+
+	};
+	return $lsRetval;
+
+}
+
+##======================================================
+##GetFlexTable_Setup
+##========================================================
+void COG_Base::GetFakeFlexTable_Setup( $sKey, $sTheme )
+{
+	GetFakeFlexTable_Setup( $sKey, $sTheme, "FaketableOpt" );
+}
+
+##======================================================
+##GetFlexTable_Setup
+##========================================================
+void COG_Base::GetFakeFlexTable_Setup( $sKey, $sTheme, $sShowingWhat )
+{
+	"<style type='text/css'>";
+	GetTheme($sTheme);
+	"</style>";
+	##FIXME!!!
+	#inline
+	<i sRef="<%Ref%>" class="SidebarButton fa fa-list-alt" onclick="top.currBodyTable = top.firstChild(top.lastChild(this.parentElement))"
+		 oncontextmenu="top.currBodyTable = top.firstChild(top.lastChild(this.parentElement));"
+		 sShowingWhat="<%$sShowingWhat%>" sRequest='<%$sKey%>' style="font-size:14px;float:left;margin-bottom:-20px;" title="Commands"></i>
+	#endinline;
+}
+##===========================================================================
+## GetFakeSnippet
+##===========================================================================
+void COG_Base::GetFakeSnippet($sRequest)
+{
+	GetFakeSnippet_Builtin($sRequest);
+}
+##===========================================================================
+## GetFakeSnippet_Builtin
+##===========================================================================
+void COG_Base::GetFakeSnippet_Builtin($sRequest)
+{
+	$sSupData = "";
+
+	if( find( $sRequest, EOI ) != -1 )
+	{
+		$sSupData = Item( $sRequest, 2, 2, EOI );
+		$sRequest = Item( $sRequest, 1, 1, EOI );
+	};
+
+	$sSubRequest = "";
+	if ( find( $sRequest, "_" ) != -1 )
+	{
+		$iItemCnt = ItemCount( $sRequest, "_" );
+		$sSubRequest = "_" + Item( $sRequest, 2, $iItemCnt, "_" );
+		$sRequest = Item( $sRequest, 1, 1, "_" );
+	};
+
+	switch($sRequest)
+	{
+
+		case "table":
+			$sKey = GetRequest("sKey");
+			GetFakeFlexTable( $sKey );
+			break;
+		case "tableLineItem":
+			$sKey = GetRequest("sKey");
+			$nIndex = GetRequest( "nIndex" );
+			$oThis = *;
+
+			JSONArray $jaTableRows = jaGetTableRows( $sKey );
+
+			#inline
+			<table id = 'flexTable' class=FT_Table cellpadding="0px" cellspacing="0" style="text-align:left;" onclick = "top.ClosePopout(this)" >
+			#endinline;
+
+			$lsTableDef = lsGetFakeTableDef($sKey);
+
+			$vsCols = CVector();
+			$vsCellStyles = CVector();
+			$vsAllowEdit = CVector();
+
+			#inline
+			<tr>
+			#endinline;
+			$lsTableDef/
+			{
+				$vsRowDef = split( *, "|" );
+
+				$sTitle =  pick( $vsRowDef, 1 );
+				$sHeaderStyle =  pick( $vsRowDef, 2 );
+
+				$sClass = "class='FT_Header'";
+
+				#inline
+					<th <%$sClass%>  style="<%$sHeaderStyle%>" ><%$sTitle%></th>
+				#endinline;
+
+				$sCurrCol = pick( $vsRowDef, 0 );
+				$vsCols << $sCurrCol;
+				$vsCellStyles << pick( $vsRowDef, 3 );
+				$vsAllowEdit <<  pick( $vsRowDef, 4 );
+
+			};
+			"</tr>";
+
+
+			SetRequest( "iEnd", $jaTableRows.Size() -1 );
+
+			$jaTableRows/
+			{
+				SetRequest( "iIternum", $iternum );
+
+				if( $iternum == $nIndex )
+				{
+					JSONObject $joCurr = *;
+					"<tr class='FT_Row' >";
+					$oThis.GetFakeFlexTableEntry($joCurr, $vsCols, $vsCellStyles, $vsAllowEdit);
+					"</tr>";
+				};
+			};
+			SetRequest( "iIternum", NULL );
+			SetRequest( "iEnd", NULL );
+			break;
+		default:
+			if( $sSupData != "" )
+				$sRequest += EOI + $sSupData;
+
+			$bMakeEditable = GetRequest( "bMakeEditable");
+			$sTags = GetRequest( "sTags" );
+			$sData = sGetText($sRequest, $bMakeEditable, $sTags );
+			$sData;
+			break;
+	};
+}
+##===========================================================================
+## lsGroupDefList_Builtin
+##
+## Display text;bCountGroups|sCollationName or groupDef|...|sCollationName or groupDef
+## groupDef = display text:sGetData request:type
+##===========================================================================
+variant COG_Base::lsGroupDefList_Builtin( $sRequest, $oParent )
+{
+
+	$lsRetval = CList();
+	switch($sRequest)
+	{
+		default:
+			return $lsRetval;
+			break;
+	};##switch
+	return $lsRetval;
+}
+##===========================================================================
+## GetCollationEncoding
+##
+## Purpose: To allow for the pieces of an encoding to be named instead of having to write the whole
+## encoding in the code. For example, a user can put "byDescription" in the encoding instead of " :sDescription:string".
+##===========================================================================
+variant COG_Base::GetCollationEncoding( $sRequest )
+{
+	$sRetval = "";
+	switch($sRequest)
+	{
+		default:
+			break;
+	};
+	return $sRetval;
+}
+##===========================================================================
+## lsGetFilterList
+##===========================================================================
+variant COG_Base::lsGetFilterList($sRequest)
+{
+	$lsRetval = CList();
+
+	$mssFilters = CMap( CList(), CList(), True );
+	$lsRetval << *.lsGetFilterList_Builtin( $sRequest );
+	$lsRetval << lsGetCustomFilterList( $sRequest );
+
+	$lsRetval/
+	{
+		$sDisplay = Item( *, 2, 2, "|" );
+
+		$mssFilters << CMap( $sDisplay, * );
+	};
+	$lsRetval = CList();
+	$lsRetval << $mssFilters;
+
+	return $lsRetval;
+}
+##================================================================================================================================
+## lsGetCustomFilterList
+##
+##NOTE: display name|0 = go right to report, 1 = display prompt first|report name| if a prompt is needed, the id of the first field|need update txn
+##==================================================================================================================================
+variant COG_Base::lsGetCustomFilterList( $sRequest )
+{
+	$oApp = COG_AppObj::oGet_s();
+
+	$sClass = COG_Base::sGetClassNameFromRequest( $sRequest );
+
+	if( $this != NULL AND $this != NULLOBJECT ) {
+		$oRegistrar = oGetLocalRegistrar();
+	} else {
+		$oRegistrar = AseRegistrar::oGet_s();
+	};
+
+	$loCustomFilters = AseFilter::loGetFiltersByClass_s( $sClass, $oRegistrar )[ bDisabled == false ];
+	$loCustomFilters = AseMethod::loGetEnabledCustomizations( $sClass, $loCustomFilters, $oRegistrar );
+
+	$lsRetval = CList();
+
+	$loCustomFilters/{
+		$sName = *.sName;
+		$sDescription = *.sDescription;
+		$lsRetval << $sName + EOI + $sClass + "|" + $sDescription;
+	};
+
+	## add in namespace filters
+	$lsRetval << SSC_AppObj_Base::lsGetNameSpaceConfigOptions( $oRegistrar, $sClass, $sRequest, "filter" );
+
+	return $lsRetval;
+}
+##===========================================================================
+## lsGetFilterList_Builtin
+##===========================================================================
+variant COG_Base::lsGetFilterList_Builtin( $sRequest )
+{
+	$lsRetval = CList();
+
+	$oAppObj = COG_AppObj::oGet_s();
+	$lsRetval << $oAppObj.lsGetFilterList_Builtin( $sRequest );
+
+	return $lsRetval;
+}
+
+#*!***************************************************************************************************
+ * <summary>
+ * 	Returns a list of filters
+ * </summary>
+ * <visibility>
+ * 	External
+ * </visibility>
+ * <param name="$sRequest" type="String">The filter to request</param>
+ * <returns>String List</returns>
+*****************************************************************************************************#
+variant COG_Base::GetFilter( $sRequest )
+{
+	## first, see it the customer has created a custom section for this
+	$oAseItem = oGetAseBMItem( "AseFilter", $sRequest );
+
+	if ( $oAseItem != NULLOBJECT )
+	{
+		$lsFilters = CList();
+		$sCode = $oAseItem.GetAttr( "sCode" );
+		Eval( $sCode );
+
+		return $lsFilters;
+	}
+	else
+	{
+	    ## look for a handler and use it if there is one
+        $sHandler = NameSpace_sGetRequestHandler($sRequest, "filter");
+
+        if ($sHandler != null) {
+            $sClass = itemcount($sRequest,EOI)>1?item($sRequest,2,2,EOI):"";
+            $lsResponse = CList();
+
+            ## split this into it's pieces (function, args, version)
+        	$sFunction = Item($sHandler,1,1,EOI);
+    		$sArgs = Item($sHandler,2,2,EOI);
+	   		$sVersion = Item($sHandler,3,3,EOI);
+
+        	## check for an EOI in the request, which is a classname
+        	$sClass = "";
+        	if (itemcount($sRequest, EOI) > 1) {
+				$sClass = item($sRequest, 2, 2, EOI);
+				$sRequest = item($sRequest, 1, 1, EOI);
+				$sFunction = $sClass + "::" + $sFunction;
+
+				## modify the arguments
+				$sArgs = $sArgs == "" ? "$sRequest, $sVersion" : $sArgs;
+			};
+
+	   		if ($sArgs != "") {
+	   			Eval("$lsResponse = " + $sFunction + "(" + $sArgs + ");");
+	   		} else {
+		        ## invoke the handling method
+		        $laArgs = CList({$sRequest, $sVersion});
+		        $lsResponse = $this.<$sFunction>($laArgs);
+	        };
+
+            return $lsResponse;
+        } else {
+			## If EOI separated only pass the first part since the built in filters do not expect a class
+			if (ItemCount($sRequest,EOI) >1) $sRequest = Item($sRequest,1,1,EOI);
+			return GetFilter_Builtin( $sRequest );
+		};
+	};
+}
+
+#*!***************************************************************************************************
+ * <summary>
+ * Returns a sort definition encoding
+ * </summary>
+ * <visibility>
+ * 	External
+ * </visibility>
+ * <param name="$sRequest" type="String">The sort to return</param>
+ * <returns>String</returns>
+*****************************************************************************************************#
+variant COG_Base::GetSort( $sRequest )
+{
+	## first, see it the customer has created a custom section for this
+	$oAseItem = oGetAseBMItem( "AseSort", $sRequest );
+
+	if ( $oAseItem != NULLOBJECT )
+	{
+		$sSortDef = "";
+		$sCode = $oAseItem.GetAttr( "sCode" );
+		Eval( $sCode );
+		return $sSortDef;
+	}
+	else {
+        ## look for a handler and use it if there is one
+        $sHandler = NameSpace_sGetRequestHandler($sRequest, "sort");
+
+        if ($sHandler != null) {
+        	## split this into it's pieces (function, args, version)
+        	$sFunction = Item($sHandler,1,1,EOI);
+    		$sArgs = Item($sHandler,2,2,EOI);
+	   		$sVersion = Item($sHandler,3,3,EOI);
+
+	   		$sResponse = "";
+
+        	## check for an EOI in the request, which is a classname
+        	$sClass = "";
+        	if (itemcount($sRequest, EOI) > 1) {
+				$sClass = item($sRequest, 2, 2, EOI);
+				$sRequest = item($sRequest, 1, 1, EOI);
+				$sFunction = $sClass + "::" + $sFunction;
+
+				## modify the arguments
+				$sArgs = $sArgs == "" ? "$sRequest, $sVersion" : $sArgs;
+			};
+
+	   		if ($sArgs != "") {
+	   			Eval("$sResponse = " + $sFunction + "(" + $sArgs + ");");
+	   		} else {
+		        ## invoke the handling method
+		        $laArgs = CList({$sRequest, $sVersion});
+		        $sResponse = $this.<$sFunction>($laArgs);
+	        };
+
+	        return $sResponse;
+        } else {
+			return GetSort_Builtin( $sRequest );
+		};
+	}
+}
+##===========================================================================
+## GetSort_Builtin
+##===========================================================================
+variant COG_Base::GetSort_Builtin($sRequest)
+{
+	$sRetval = "";
+	switch($sRequest)
+	{
+		default:
+			break;
+	};
+	return $sRetval;
+}
+##===========================================================================
+## lsGetSortList
+##===========================================================================
+variant COG_Base::lsGetSortDefList($sRequest)
+{
+	$lsRetval = CList();
+	$lsRetval << lsGetCustomSortList( $sRequest );
+	$lsRetval << *.lsGetSortDefList_Builtin( $sRequest );
+	return $lsRetval;
+}
+
+##================================================================================================================================
+## lsGetCustomSortList
+##
+##==================================================================================================================================
+variant COG_Base::lsGetCustomSortList( $sRequest )
+{
+	$oRegistrar = oGetLocalRegistrar();
+
+	$sClass = sGetClassNameFromRequest( $sRequest );
+
+	$loCustomSorts = AseSort::loGetSortsByClass_s( $sClass, $oRegistrar );
+	$loCustomSorts = AseMethod::loGetEnabledCustomizations( $sClass, $loCustomSorts, $oRegistrar );
+
+	$lsRetval = CList();
+
+	$loCustomSorts/
+	{
+		$sName = *.sName;
+		$lsRetval << $sName + "|" + $sName + EOI + $sClass;
+	};
+
+	## add in namespace sorts
+	$lsRetval << SSC_AppObj_Base::lsGetNameSpaceConfigOptions( $this, $sClass, $sRequest, "sort" );
+
+	return $lsRetval;
+}
+
+##===========================================================================
+## lsGetSortDefList_Builtin
+##===========================================================================
+variant COG_Base::lsGetSortDefList_Builtin( $sRequest )
+{
+	$lsRetval = CList();
+	switch($sRequest)
+	{
+		default:
+			break;
+	};
+	return $lsRetval;
+}
+
+##===========================================================================
+## lsGetThemeList
+##===========================================================================
+variant COG_Base::lsGetThemeList($sRequest)
+{
+	$lsRetval = *.lsGetThemeList_Builtin($sRequest);
+	return $lsRetval;
+}
+
+##===========================================================================
+## lsGetThemeList_Builtin
+##===========================================================================
+variant COG_Base::lsGetThemeList_Builtin($sRequest)
+{
+	$lsRetval = CList();
+	switch($sRequest)
+	{
+		default:
+			break;
+	};
+	return $lsRetval;
+}
+
+##===========================================================================
+## sGetDecoratedText
+##
+##Inputs: The request ID, a bool flag of whether or not it should be editable,
+##and a string of the extra HTML tags/attributes that will be added on (right now,
+##this is usually just the validation tag.)
+##		NOTE: sTagAttrs MUST be passed to the function in the correct HTML format
+## of tagName = value for them to work properly.
+##
+##Outputs: Generates a span and returns it to the caller
+##===========================================================================
+variant COG_Base::sGetDecoratedText($sRequest,$bEdit,$sTagAttrs) {
+	return sGetDecoratedText( $sRequest, $bEdit, $sTagAttrs, "toc" );
+}
+
+#*!***************************************************************************************************
+ * <summary>
+ * 	Generates content with markups applied
+ * </summary>
+ * <visibility>
+ * 	External
+ * </visibility>
+ * <param name="$sRequest" type="String">The data request</param>
+ * <param name="$bEdit" type="Boolean">Whether or not the value should be editable</param>
+ * <param name="$sTagAttrs" type="String">Any HTML tag attributes to apply to the tag</param>
+ * <param name="$sContext" type="String">The context of the request, defaults to <code>"toc"</code> [OPTIONAL]</param>
+*****************************************************************************************************#
+variant COG_Base::sGetDecoratedText($sRequest,$bEdit,$sTagAttrs, $sContext)
+{
+	## check export state
+	$sExport = GetRequest( "sExport" );
+	$sExport = $sExport == null ? "" : $sExport;
+	$bExport = $sExport != "";
+
+	## check if mod tips are suppose to be displayed INLINE
+	$bModTips = false;
+	if ( Not $bExport Or ( $sExport == "Word" Or $sExport == "HtmlFile" ) ) {
+		$bModTips = bShowModTipsInFields();
+		if ( $bModTips ) $bEdit = False;
+	};
+
+	## try to get MODTIPS if appropriate
+	$sDisplayValue = null;
+	if ( $bModTips ) {
+		$sDisplayValue = sGetMod( "sDescription", false );
+	};
+
+	if ( $sDisplayValue == null ) {
+		$sValue = "Empty Value";
+
+		$sResponse = $this.sGetData( $sRequest );
+
+		if($sResponse)
+			$sValue = $sResponse;
+
+		$sDisplayValue = $sValue;
+
+		if ( ItemCount( $sResponse, eoi ) > 1 )
+		{
+			$sValue = Item( $sResponse, 1, 1, eoi );
+			$sDisplayValue = Item( $sResponse, 2, 2, eoi );
+		};
+	};
+
+	## If sDescription it should be the raw text so we need to htmlencode the value
+	if($sRequest == "sDescription" And Not $bModTips)
+		$sDisplayValue = HTMLEncode( $sDisplayValue );
+
+	$class = "class = ''";
+
+	$sDecorations = sGetMarkupDecorations( $sContext );
+	$sRefs = item( $sDecorations, 1, 1, eoi );
+	$sStyles = item( $sDecorations, 2, 2, eoi );
+	$sTitle = item( $sDecorations, 3, 3, eoi );
+	$sTagImages = item( $sDecorations, 4, 4, eoi );
+
+	$sTemp = "";
+
+	##check to make sure it isn't locked
+	if( $bEdit )
+		$bEdit = bIsEditable();
+
+	##$sValue must be encoded because of inner ' marks. The encoding is undone in smartEdit_onfocusin when sValue is assigned to the innerText value
+	if ( Not $bExport AND $bEdit )
+	{
+		$sTemp += "<span publisher='" + Ref + "~" + "onNameChange" + "~" + "' ";
+		$sTemp += " class='FT_NodeEditText' contenteditable=true style=""max-width:100%;" + $sStyles + " "" "  + $sRefs + $sTitle + $sTagAttrs + " sRef='" + *.Ref + "'";
+		$sTemp += " sItem='" + $sRequest + "' sValue='" + HTMLEncode($sValue) + "'>";
+		$sTemp += $sDisplayValue + "</span>";
+	}
+	else if( $sExport == "Review" )
+	{
+		$sNameID = 'sGetName/ID'();
+		$sClassname = classname;
+		$sTemp = "<span class='ReviewDataField' sNameID='" + $sNameID + "' sClassname='" + $sClassname + "' sRequest='" + $sRequest + "' >";
+		$sTemp += $sDisplayValue + "</span>";
+	}
+	else
+	{
+		$sTemp +=   "<span class='NonEditableText' style=""max-width:100%;" + $sStyles + " "" " + $sRefs + $sTitle + $sTagAttrs + " >";
+		$sTemp +=	$sDisplayValue + "</span>";
+	};
+
+	$sResponse = $sTemp + $sTagImages;
+
+	## for showing expand/collapse arrows in a nested table
+	$bShowCollapseToggles = GetRequest( "bShowCollapseToggles" );
+
+	if( $bShowCollapseToggles == NULL OR $bExport )
+		$bShowCollapseToggles = false;
+
+
+
+	if( $bShowCollapseToggles )
+	{
+		$bIsParent = GetRequest( "bIsParent" );
+
+		if( $bIsParent == NULL )
+			$bIsParent = false;
+
+		if( $bIsParent )
+		{
+			$sThemeFolder = ::sGetThemeFolder();
+			$sImage = "Images/" + $sThemeFolder + "/arrowhead-down.gif";
+
+			$nLevel = $this.GetContext( "Level", true );
+
+			if( $nLevel > 1 )
+				$sImage = "Images/" + $sThemeFolder + "/arrowhead-right.gif";
+
+			$sResponse += "<img class='TableRowToggle' src='" + $sImage + "' style='margin-right:5px;display:inline;cursor:pointer;' onclick='top.toggleTieredTableRowCollapse(this)' />";
+
+			##only display this for the FIRST instance, so clear the requests after this point
+			SetRequest( "bShowCollapseToggles", NULL );
+			SetRequest( "bIsParent", NULL );
+		};
+	};
+
+	$bIncorporate = GetRequest( "bReviewIncorporateView" );
+	$bIncorporate = $bIncorporate == null ? false : CBool( $bIncorporate );
+	if( $bIncorporate )
+	{
+		$sValue = $sResponse;
+		$sNameID = 'sGetName/ID'();
+		$sClassname = classname;
+		$sSafeRequest = Replace( $sRequest, EOI, "EOI" );
+		$sASE = "sGetDecoratedText(""" + $sRequest + """, """ + $bEdit + """, """ + $sTagAttrs + """, """ + $sContext + """ );";
+		$sURLParams = "";
+		if( $sExport != "" )
+			$sURLParams += "&sExport=" + $sExport;
+		if( $bShowCollapseToggles )
+			$sURLParams += "&bShowCollapseToggles=" + $bShowCollapseToggles + "&bIsParent=" + $bIsParent;
+		$sResponse  = "<span class='Incorporate_" + $sNameID + "_" + $sClassname + "_" + $sSafeRequest + "'";
+		$sResponse += " sType='ASE' sASE='" + htmlencode($sASE) + "' sURLParams='" + $sURLParams + "' >";
+		$sResponse += $sValue + "</span>";
+	};
+
+	return $sResponse;
+}
+
+#*!***************************************************************************************************
+ * <summary>
+ * 	Renders a trace report
+ * </summary>
+ * <visibility>
+ * External
+ * </visibility>
+ * <param name="$sKind" type="String">The kind of object to originate from</param>
+ * <param name="$sTraceTo" type="String">The object request being traced to</param>
+ * <param name="$sRelationship" type="String">The scope for <code>$sTraceTo</code></param>
+ * <param name="$sKindTitle" type="String">The title for column 1</param>
+ * <param name="$sTraceTitle" type="String">The title for column 2</param>
+*****************************************************************************************************#
+void COG_Base::TraceReport( $sKind, $sTraceTo, $sRelationship, $sKindTitle, $sTraceTitle )
+{
+	$loObjs = loGetObjects( $sKind, "Below" );
+
+	#inline
+		<style type="text/css">
+			.FT_Table
+			{
+				color:black;
+				table-layout:fixed;
+				width: 100%;
+				border-collapse: collapse;
+				empty-cells:show;
+				font-family: Arial;
+				font-size: 8pt;
+				border: 1px solid gray;
+				word-wrap:break-word;
+
+			}
+
+			.FT_Header
+			{
+				color:black;
+				height: 18px;
+				font-weight: bold;
+				background-color:#CCCCCC;
+				border: 1px solid gray;
+				vertical-align: bottom;
+			}
+
+			.FT_Cell
+			{
+				border: 1px solid gray;
+				text-align: left;
+			}
+			.printonly
+			{
+				display:none;
+			}
+		</style>
+		<style media='print'>
+			.FT_Table
+			{
+				color:black;
+				table-layout:fixed;
+				width: 100%;
+				border-collapse: collapse;
+				empty-cells:show;
+				font-family: Arial;
+				font-size: 8pt;
+				border: 1px solid gray;
+				word-wrap:break-word;
+
+			}
+
+			.FT_Header
+			{
+				color:black;
+				height: 18px;
+				font-weight: bold;
+				background-color:#CCCCCC;
+				border: 1px solid gray;
+				vertical-align: bottom;
+			}
+
+			.FT_Cell
+			{
+				border: 1px solid gray;
+				text-align: left;
+			}
+			.noprint
+			{
+				display:none;
+			}
+			.printonly
+			{
+				display:block;
+			}
+		</style>
+		<%::html_header_close("");%>
+		<table class=FT_Table cellpadding="4px" cellspacing="0" style='font-family:verdana;' >
+		<tr style="height:35px;">
+		<td class=FT_Header><%$sKindTitle%></td>
+		<td class=FT_Header><%$sTraceTitle%></td>
+		</tr>
+
+	#endinline;
+
+	if( IsEmpty( $loObjs ) )
+	{
+		#inline
+		<tr>
+			<td>
+				None.
+			</td>
+		</tr>
+		#endinline;
+
+	};
+
+	$soHandled = CSet( );
+
+	$loObjs/
+	{
+		$oObj = *;
+
+		if( $soHandled contains $oObj == false )
+		{
+			## insert into already handled set
+			$soHandled << $oObj;
+
+			## Get the subobjects
+			$loTrace = loGetObjects( $sTraceTo, $sRelationship );
+			$iTrace = Count( $loTrace );
+
+
+			if ( $iTrace == 0 )
+			{
+				#inline
+				<tr>
+				<td class=FT_Cell style="" ><%GetSnippet( "sTrace" )%></td>
+				<td class=FT_Cell style="" ></td>
+				</tr>
+				#endinline;
+			}
+			else
+			{
+				#inline
+				<tr>
+				<td class=FT_Cell style="" rowspan=<%$iTrace%> ><%GetSnippet( "sTrace" )%></td>
+				#endinline;
+
+				$iCnt = 1;
+
+				$loTrace/
+				{
+					if ( $iCnt > 1 ) "<tr>";
+					#inline
+						<td class=FT_Cell style="" vAlign=top ><%GetSnippet( "sTrace" )%></td>
+						</tr>
+					#endinline;
+
+					$iCnt += 1;
+				};
+			};
+		};
+
+
+	};
+
+	#inline
+		</table>
+	#endinline;
+
+}
+##===========================================================================
+## loGetObjects
+##===========================================================================
+variant COG_Base::loGetObjects_Builtin( $sRequest, $sScope )
+{
+	$loMembers = CList();
+
+	## Note that if the request is blank (all filters are turned off) then
+	## return back  the empty list as long as the scope is not TOC or Tree
+	if( $sRequest == "" and ( $sScope != "TOC" AND $sScope != "Tree" ) )
+		return $loMembers;
+
+	switch($sScope)
+	{
+		case "TOC":
+		case "HOQ":
+		case "KJ":
+		case "Search":
+			$sScope = "Tree";
+			break;
+		default:
+			break;
+	};
+	if($sRequest == "Custom")
+	{
+		## A new request called "Custom" is included here.
+		## The scope should be in the form:
+		##
+		##	syntax:		statement1[;statement2 etc]
+		##
+		##		where:	statement is "request1 [& request2 etc] [/ sub-request1 [& subrequest2 etc] ] etc
+		##
+		##		where:	request and subrequest are "[+]kind [, scope [, filter ] ]
+		##
+		##		where:	kind is object type such as Requirements, Voices, etc.
+		##						NOTE: + sign means to include intermediate level
+		##						NOTE: "this" gives the object itself
+		##				scope is Children, Below, Parents, etc.
+		##				filter is the name of a custom filter OR the filter itself (such as, sDescription|==(Text)|Mitch )
+		##
+		## With a little practice, the syntax is both simple and very powerful. You'll get the hang of it.
+		##
+		## Some examples include:
+		##				"Requirements; Voices/Requirement"
+		##				"+Requirements/Requirements; Voices/+Requirements/Requirements"
+		##				"this&Groups,Below / Risks,Below"
+		##				"Risks&Requirements&Voices&Tests/ActionItems"
+		##
+		if ( GetThreadContext( "bCustomGetObjectList" ) )
+		{
+			SetThreadContext( "bCustomGetObjectList", false );
+			throw( "Cannot use a custom loGetObjects call inside a custom request.");
+		}
+		else
+		{
+			SetThreadContext( "bCustomGetObjectList", true );
+			try
+			{
+				if( trim( Lower( $sScope ) ) == "this" )
+					$loMembers << $this;
+				else
+				{
+					## prepare a list for the results
+					SetThreadContext( "loAccumResults", CList() );
+
+					## call Accum Objects to begin the process for level 1 and beyond
+					$this.AccumObjects( $sScope, 1 );
+
+					## when you return, you have a gift waiting for you
+					$loMembers << GetThreadContext( "loAccumResults" );
+				};
+			}
+			catch( $sError )
+			{
+				SetThreadContext( "bCustomGetObjectList", false );
+				throw( "Info: Custom request failed while processing custom request '" + $sScope + "'. Please review it on the details page. " + CRLF + $sError );
+			};
+		};
+		SetThreadContext( "bCustomGetObjectList", false );
+	}
+	else if( Upper( $sRequest ) == "PROCESSTEMPLATES" )
+	{
+		$loMembers = /'Data Vault 1/'/COG_WorkflowTaskTemplate[ oParent == NULLOBJECT ];
+		$loMembers = loAlphaSortByDescription( $loMembers );
+	}
+	else
+	{
+		$loMembers << loGetObjects_b( $sRequest, $sScope );
+	};
+
+	return $loMembers;
+}
+
+##===========================================================================
+## loGetAllObjects
+##===========================================================================
+variant COG_Base::loGetAllObjects($sScope)
+{
+	$loRetval = CList();
+	return $loRetval;
+}
+##===========================================================================
+## lsGetFormDef_Builtin
+##
+## NOTE: Display Name|sGetData request|bEditable|tagAttrs
+##===========================================================================
+variant COG_Base::lsGetFormDef_Builtin( $sRequest )
+{
+	$lsRetVal = CList();
+
+	switch ( $sRequest )
+	{
+		case "General":
+			$lsRetval = CList();
+			$lsRetval << "Name|sDescription|true|sEmptyPrompt='Name here...'";
+			$lsRetval << "Item Id|sItemId|false|sEmptyPrompt='ID here...'";
+			break;
+		default:
+			super::lsGetFormDef_Builtin( $sRequest );
+			break;
+	};
+
+	return $lsRetval;
+}
+##===========================================================================
+## lsGetMenuItems_BuiltIn
+## $sRequest|$sDisplay Name where $sRequest = the request sent to loGetObjects
+##===========================================================================
+variant COG_Base::lsGetMenuItems_BuiltIn()
+{
+	$lsMenus = CList();
+
+	$lsMenus << "Home|Home";
+	$lsMenus << "Details|Details";
+	$lsMenus << "Traceability|Traceability";
+	$lsMenus << "Reports|Reports";
+	$lsMenus << "History|History";
+
+	return $lsMenus;
+}
+##===========================================================================
+## GetSetupTree
+##===========================================================================
+void COG_Base::GetSetupTree()
+{
+	$oAppObj = COG_AppObj::oGet_s();
+	$oAppObj.GetSetupTree();
+}
+##===========================================================================
+## GetLibraryTree
+##===========================================================================
+void COG_Base::GetLibraryTree()
+{
+	$oAppObj = COG_AppObj::oGet_s();
+	$oAppObj.GetLibraryTree();
+}
+##===========================================================================
+## GetOrganizationTree
+##===========================================================================
+void COG_Base::GetOrganizationTree()
+{
+	## Disable customization use in this thread to prevent performance problems caused by all the
+	## projects and organizations being initialized
+	SetThreadContext("bDisableCustomItems", true);
+	$oAppObj = COG_AppObj::oGet_s();
+	$oAppObj.GetOrganizationTree();
+
+}
+##===========================================================================
+## sGetIcon
+##===========================================================================
+variant COG_Base::sGetIcon( $sHint )
+{
+	return sGetStandardTableIcon( $sHint );
+}
+
+
+##=========================================================================
+## sGetFlexColor - TWO Overloads
+##=========================================================================
+variant COG_Base::sGetFlexColor( )
+{
+	return sGetFlexColor( sGetTagType() );
+}
+##=========================================================================
+## sGetFlexColor
+##=========================================================================
+variant COG_Base::sGetFlexColor( $sTag )
+{
+	$sColor = "Yellow";
+
+	return $sColor;
+}
+
+##===========================================================================
+## sHelperDiv
+##
+##Purpose: Either generates the div for the tree in the TOC or the button
+##in the header for the given request.
+##Inputs: The string request and a boolean flag of whether or not to generate the
+##tree, a handle to the project being displayed, and the title of the item to display.
+##===========================================================================
+void COG_Base::sHelperDiv( $sRequest, $drawTree, $sTitle, $sContext  )
+{
+	if($drawTree == true){
+		#inline
+		<div id=<%$sRequest%>>
+		#endinline;
+
+		$iLevelsToShow = GetRequest( "iLevelsToShow" );
+
+		if( $iLevelsToShow == NULL )
+			$iLevelsToShow = 1;
+
+		if(($sContext == "KJ")AND($sRequest != "Voices"))
+		{
+			$iLevelsToShow = 2;
+			$sNodeStyle = "FT_Node";
+		}
+		else
+		{
+			$sNodeStyle = "FT_Node";
+		};
+
+		$sParams = GetRequest( "sGroupParams" );
+		$sFilter = GetRequest( "sFilter" );
+		$sCountGroups = GetRequest( "sCountGroups");
+
+
+		if( $sParams != NULL )
+			$lsParams = split( $sParams, "|" );
+		else
+			$lsParams = CList();
+		if( $sFilter == NULL )
+			$sFilter = "";
+		if( $sCountGroups == NULL )
+			$bCountGroups = false;
+		else
+			$bCountGroups =  $sCountGroups == "True"? true: false;
+
+		#inline
+			<%$this.GetFTEntry( $iLevelsToShow, $sContext, $sRequest, $sNodeStyle, $lsParams,$sFilter,$bCountGroups, $this )%></div>
+		#endinline;
+	};
+}##COG_Base::sHelperDiv
+
+##===========================================================================
+## GetFlexMindEntry
+##===========================================================================
+void COG_Base::GetFlexMindEntry( $nLevels, $sContext, $sRequest, $sNodeStyle, $oParent )
+{
+	## my type
+	$sTag = sGetTagType( );
+
+	## my title
+	$sTitle = URLEncode( sGetDescription() );
+
+	## my subitems
+	$loMembers = loGetObjects( $sRequest, "Tree" );
+
+	## call my base method to do it
+	GetFlexMindEntry( $sTag, $nLevels, $sTitle, $loMembers, $sContext, $sRequest, $sNodeStyle, $oParent );
+}
+
+##===========================================================================
+## GetFlexMindEntry
+##===========================================================================
+void COG_Base::GetFlexMindEntry( $sTag, $nLevels, $sTitle, $loChildren, $sContext, $sRequest, $sNodeStyle, $oParent )
+{
+	## return if nLevels is zero
+	if ( $nLevels < 0 ) return;
+
+	## greater than 0 means to show my kids
+	$bDeep = $nLevels > 0;
+
+	## decrement the Levels
+	$nLevels -= 1;
+
+	$sColor = sGetFlexColor();
+
+	## get my parent ref, if any
+	$sOrigParentRef = "";
+	if ( $oParent != NullObject )
+		$sOrigParentRef = $oParent.Ref;
+
+	## output myself
+	#inline
+	<node bShowKids="0" sNodeLayout="LeftToRight" iX="Left" iY="Center" bFixedWidth="0" iFixedWidth="800" bFixedHeight="0" iFixedHeight="250" sTag="<%$sTag%>" sText="<%$sTitle%>" sRef="<%Ref%>" sOrigParentRef="<%$sOrigParentRef%>" sColor="<%$sColor%>"   >
+	#endinline;
+
+		$oThis = *;
+
+		## output my subitems
+		if ( $bDeep )
+		{
+			$loChildren/GetFlexMindEntry( $nLevels, $sContext, $sRequest, $sNodeStyle, $oThis );
+		};
+
+	## close my tags
+	#inline
+	</node>
+	#endinline;
+}
+##===========================================================================
+## sGetSetData - This should be implemented on each class that has something
+## to offer. However, don't call it directly, use the more convenient
+## accessor functions: sGetData( $sRequest, $bMakeEditable ) and SetData( $sRequest, $Value ).
+## Both are defined on COG_Base.
+##===========================================================================
+variant COG_Base::sGetSetData( $sRequest, $bSettingValue, $Value, $bGetDisplay )
+{
+	$sResponse = "";
+
+	## Read orignial request and store in separate variable. Use this to pass along
+	## to base class method in case this request is not handled at this level.
+	$sOriginal = $sRequest;
+
+	## init a variable
+	$sSubRequest = "";
+
+	## Strip out inner request if any.
+	if( find( $sRequest,EOI ) != -1 )
+	{
+		$sSubRequest	= Item( $sRequest, 2, 9999, EOI );
+		$sRequest		= Item( $sRequest, 1, 1, EOI );
+	};
+
+	if ( $bSettingValue )
+	{
+
+		switch ( $sRequest )
+		{
+			case "Bookmark":
+			case "Follow":
+
+				$sKey = "s" + $sRequest + "s";
+
+				## add or remove this item from the user's bookmarks
+				$bAdd = $Value == "true";
+
+				$sItems = $me.oPerson.sGetData( $sKey );
+
+				if ( $sRequest == "Bookmark" )
+				{
+					$sShowingWhat = GetRequest( "sShowingWhat" );
+					if ( $sShowingWhat == null )
+						$sShowingWhat = "Home";
+					$sItem = sGetEKey() + "|" + $sShowingWhat;
+				}
+				else
+					$sItem = sGetEKey();
+
+				if ( $bAdd == true )
+				{
+					if ( $sItems == "" )
+					{
+						$sItems = $sItem;
+						$me.oPerson.SetData( $sKey, $sItems );
+					}
+					else if ( find( $sItems, $sItem ) == -1 )
+					{
+						$sItems = $sItem + eoi + $sItems;
+						$me.oPerson.SetData( $sKey, $sItems );
+					};
+				}
+				else
+				{
+					if ( $sItems != "" )
+					{
+						$sItems = replace( $sItems, $sItem + eoi, "" );
+						$sItems = replace( $sItems, $sItem, "" );
+						$me.oPerson.SetData( $sKey, $sItems );
+					};
+				};
+
+				## take this opportunity to clean up
+				$sGoodItems = "";
+				$sDelim = "";
+				split( $sItems, eoi )/
+				{
+					if ( $sRequest == "Bookmark" )
+						$sObj = Item( *, 1, ItemCount( *, "|" ) - 1, "|" );
+					else
+						$sObj = *;
+
+					$oObj = COG_Base::oGetByEKey_s( $sObj );
+					if ( $oObj.IsValid )
+						$sGoodItems = $sGoodItems + $sDelim + *;
+
+					$sDelim = eoi;
+				};
+
+				$me.oPerson.SetData( $sKey, $sGoodItems );
+
+				break;
+
+			default:
+
+				try
+				{
+					$sResponse = sSetData_b( $sOriginal, $Value );
+				}
+				catch( $sResponse )
+				{
+					$sResponse = ::sGetErrorString($sResponse);
+					throw($sResponse);
+				};
+		};
+	}
+	else
+	{
+		switch ( $sRequest )
+		{
+			case "sBodyLink":
+
+				$sResponse = sBodyLink( sGetText( "sDescription" ) );
+				break;
+			case "sQualifiedDescription":
+			case "sDescriptionWithSection":
+			case "sDescriptionWithSectionAndGroup":
+			case "sDescriptionWithID":
+			case "sQualifiedDescriptionWithoutID":
+				$sText = sGetDescription();
+				if($sText == "")
+					$sText = "No Description";
+				break;
+				$sDesc = htmlencode( $sText );
+				$sDisplay = $sDesc;
+
+				$sResponse = $sDesc  + eoi + $sDisplay;
+
+				break;
+			case "sSearchDescription":
+				$sResponse = sGetDataDisplay( "sQualifiedDescription" );
+				$sResponse = ::sRemoveHTML( $sResponse );
+				break;
+			case "sClassname":
+				$sResponse = $this.classname;
+				break;
+			case "sWorkflowState":
+				$sResponse = "";
+				break;
+			case "nAuthenticationFlag":
+				$sDataRequest = Item( $sSubRequest, 1, 1, EOI );
+				$sKindOfChange = Item( $sSubRequest, 2, 2, EOI );
+				$sResponse = nGetAuthenticationFlag( $sDataRequest, $sKindOfChange );
+				break;
+			case "sExternalURLLink":
+				$sHost = ::sGetServerFullName();
+				$sPort = GetRequest( "SERVICE_PORT" );
+
+				if ( $sPort != "" ) $sHost = $sHost + ":" + $sPort;
+				$sRoot = GetRequest( "KC_DOMAINID" );
+				$sHttpType = GetDaoContext("PROTOCOL_TYPE");
+				$sHttpPath = $sHttpType + "://" + $sHost + "/" + $sRoot + "/Run.ase?sTocParentKey=";
+
+				$sEKey = sGetEKey();
+
+				$sHttpPath += $sEKey + "&sBodyUrl=GetBodyPage.ase?sThisKey=" + $sEKey + "&sShowingWhat=";
+				$sShowingWhat = GetDaoContext( "sShowingWhat" );
+				if( $sShowingWhat == NULL )
+					$sShowingWhat = "Home";
+
+				$sHttpPath += URLEncode( $sShowingWhat );
+
+				$sResponse = $sHttpPath;
+
+			break;
+
+			case "iNumberOfObjects":
+				if ( itemcount( $sSubRequest, EOI ) == 2 )
+				{
+					## the subrequest should have a KIND and SCOPE
+					$sKind = Item( $sSubRequest, 1, 1, EOI );
+					$sScope = Item( $sSubRequest, 2, 2, EOI );
+
+					## get the objects
+					$loObjects = loGetObjects( $sKind, $sScope );
+
+					$sResponse = CStr( Count( $loObjects ) );
+				}
+				else
+					$sResponse = "Error: Incorrect number of arguments for iNumberOfObjects";
+
+				break;
+			case "GetProcessInfo":
+				$sParam = GetRequest( "sParam" );
+				if( $sParam != NULL )
+					$sResponse = GetProcessInfo( $sParam );
+				break;
+			default:
+				$sResponse = sGetData_b( $sOriginal, "" );
+
+				break;
+		};
+	};
+
+	return $sResponse;
+}
+
+##===========================================================================
+## lsGetDataList
+##      -Display Name
+##      -Short Description
+##      -Boolean thick or thin client
+##      -Boolean displayable
+##      -Description of function
+##===========================================================================
+variant COG_Base::lsGetDataList( $sConsumer )
+{
+	return lsGetDataList_Builtin( $sConsumer );
+}
+
+##===========================================================================
+## lsGetDataList_Builtin
+##      -Display Name
+##      -Short Description
+##		-Boolean, editable (has a set method also)
+##		-integer, availability, 0 = thin, 1 = thick, 2 = both
+##      -Boolean, html content
+##      -Description or function of field
+##===========================================================================
+variant COG_Base::lsGetDataList_Builtin( $sConsumer )
+{
+	$lsRetval = CList();
+	$lsRetval << "sDescription|Description|true|2|false|The description of this item";
+	return $lsRetval;
+}
+
+##===========================================================================
+## GetPage( sShowingWhat ) - You should call GetPage
+##===========================================================================
+void COG_Base::GetPage_Builtin( $sShowingWhat )
+{
+	$oThis = *;
+	switch ( $sShowingWhat )
+	{
+		case "Dashboard":
+		case "Details":
+		case "Values":
+		case "Markups":
+		case "AssociatedItems":
+		case "Attachments":
+		case "History":
+		case "Preferences":
+		case "Privileges":
+			$lsPageDefs = lsGetPageSections($sShowingWhat);
+			if(IsEmpty($lsPageDefs))
+			{
+				::Redirect( "comingsoon.ase?sFeature=" + $sShowingWhat );
+				break;
+			};
+			WriteStandardPage( $lsPageDefs, $sShowingWhat );
+			break;
+		case "Research":
+			::Redirect( "Research.ase?oThis=" + Ref + "&bGo=true&sDescription=" + URLEncode( sGetDescription() ) );
+			break;
+		case "Traceability":
+			$sTraceType	= GetRequest( "sTraceType" );
+
+			if ( $sTraceType == NULL )
+				$sTraceType = GetDaoContext( "sTraceType" );
+			else
+				SetDaoContext( "sTraceType", $sTraceType );
+
+			if ( $sTraceType == NULL )
+				$sTraceType = "Normal";
+
+			if ( $sTraceType == "Normal" )
+			{
+				$lsPageDefs = lsGetPageSections($sShowingWhat);
+				if(IsEmpty($lsPageDefs))
+				{
+					::Redirect( "comingsoon.ase?sFeature=" + $sShowingWhat );
+					break;
+				};
+				WriteStandardPage( $lsPageDefs, $sShowingWhat );
+			}
+			else if ( $sTraceType == "Graphical" )
+			{
+				$sContext		= GetRequest( "sContext" );
+				$sRequest		= GetRequest( "sRequest" );
+				$sNodeStyle		= GetRequest( "sNodeStyle" );
+
+				GetFlexMindPage( $sContext, $sRequest, $sNodeStyle );
+			}
+			else if ( $sTraceType == "StigGraphical" )
+			{
+				$sContext		= GetRequest( "sContext" );
+				$sRequest		= GetRequest( "sRequest" );
+				$sNodeStyle		= GetRequest( "sNodeStyle" );
+
+				GetStigPage( $sContext, $sRequest, $sNodeStyle );
+			};
+
+			break;
+		default:
+			super::GetPage_Builtin( $sShowingWhat );
+			break;
+	};
+}
+
+##===========================================================================
+## GetFlexMindPage
+##===========================================================================
+void COG_Base::GetFlexMindPage( $sContext, $sRequest, $sNodeStyle )
+{
+	::html_header("GetPage.ase");
+
+	#inline
+	<script language=javascript>
+
+		function OnShowSelected( )
+		{
+			if (FlexEditCtrl1.sGetSelection) {
+				sRef = FlexEditCtrl1.sGetSelection();
+
+				if( sRef != "" )
+				{
+					// check the reference before navigating
+					if ( sRef.substr(0, 2) != "d|" )
+						alert( "Please select an object node to show." );
+					else
+					{
+						sUrl = "GetBodyPage.ase?oThis=" + sRef + "&sShowingWhat=Traceability&sTraceType=Graphical";
+
+						top.link( sUrl, 'body' );
+					};
+				}
+				else
+					alert( "Please select a node to show." );
+			} else {
+				alert( "<% GetGenString( "ksRequiresActiveX" ) %>" );
+			}
+		}
+
+		function setSize()
+		{
+			try
+			{
+				document.getElementById("FlexEditCtrl1").height = document.documentElement.clientHeight-15;
+			}
+			catch(e)
+			{
+				document.getElementById("FlexEditCtrl1").height = document.body.clientHeight-15;
+			}
+		}
+	    </script>
+
+	    <script FOR="FlexEditCtrl1" EVENT="OnLoad()">
+			sHost = document.URL;
+	        FlexEditCtrl1.LoadData2( sHost, "GetSnippet.ase?oThis=<%$this.Ref%>&sShowingWhat=FlexMindXML&sRequest=<%$sRequest%>&sContext=<%$sContext%>&sNodeStyle=<%$sNodeStyle%>" );
+		</script>
+		<style type="text/css">
+		*
+		{
+			font-family: Verdana;
+			font-size: 8pt;
+		}
+		.fakelink
+		{
+			/*ActionLink Color*/
+			color: #1A7BB2;
+			cursor:pointer;
+			text-decoration: underline;
+		}
+
+		</style>
+
+	  </head>
+	  <body id=mybody scroll=no topmargin=0 rightmargin=0 bottommargin=0 leftmargin=0
+		onload='if (!top.bActiveXSupport()) { alert(top.GetGenString("ksRequiresActiveX")); window.location = "GetPage.ase?oThis=<%Ref%>&sShowingWhat=Traceability&sTraceType=Normal"; return; } top.oFlexControl.push( document.getElementById("FlexEditCtrl1") ); setSize();' onbeforeunload="top.RemoveFlexControl( document.getElementById('FlexEditCtrl1') );">
+
+
+			<table width=100% border=0 cellpadding=0 cellmargin=0 cellspacing=0 height=15px>
+				<tr >
+					<td>
+						<span class="fakelink HelpTip" style="float:left;" onclick="window.location = this.getAttribute('sUrl');" sUrl="GetPage.ase?oThis=<%Ref%>&sShowingWhat=Traceability&sTraceType=Normal" sHelpId="Flex_View_Normally">
+							View Normally
+						</span>
+						<span style="float:left;">&nbsp;&nbsp;&nbsp;</span>
+						<span class="fakelink HelpTip" style="float:left;" onclick="OnShowSelected();" sHelpId="Flex_Switch_to_Selected_Object">
+							Switch to Selected Object
+						</span>
+						<div style="float:right; margin-right:10px; margin-top:1px;"><img src="images/<% ::sGetThemeFolder() %>/_help.png"	title="Help"  style="cursor:pointer;" onclick="top.OpenWindow(this,400,300)" href="quickEditHelp.htm" /></div>
+					</td>
+				</tr>
+			</table>
+
+		<div id='FlexEditOuterDiv' style="position:absolute; width:100%; height:100%;">
+			<OBJECT ID="FlexEditCtrl1" data="FlexEdit.cab#Version=1,4,29,0" CODEBASE="FlexEdit.cab#Version=1,4,29,0" CLASSID="CLSID:FA3EA0AD-4E2C-4D60-A7E3-160F2B559AD0" HEIGHT=10px WIDTH=100% border=0><% GetGenString("ksRequiresActiveX") %></OBJECT>
+		</div>
+
+	#endinline;
+
+	::html_footer();
+
+}
+
+##===========================================================================
+## GetFlexMindNode
+##===========================================================================
+void COG_Base::GetFlexMindNode( $sFormat, $nLevel, $sDirection, $sKind, $sScope, $sDataKey )
+{
+	if ( $nLevel > 10 )
+		return;
+
+	if ( $sScope == "Interactions" and $nLevel > 2 )
+		return;
+
+	$sText = sGetData( $sDataKey );
+	$sText = Item( $sText, 1, 1, eoi );
+	$sColor = sGetFlexColor();
+
+	#inline
+	<node sRef="<%Ref%>" sText="<%$sText%>" sColor="<%$sColor%>" >
+	#endinline;
+
+	$lsLayout = lsGetNodeLayout( $sFormat, $sDirection );
+
+	$lsLayout/
+	{
+		$sRow = *;
+
+		$vsRowDef = split( $sRow, "|" );
+
+		$sItem = first( $vsRowDef );
+
+		$sKind = pick( $vsRowDef, 0 );
+		$sScope = pick( $vsRowDef, 1 );
+		$sDataKey = pick( $vsRowDef, 2 );
+		$sCollationGroup = pick( $vsRowDef, 3 );
+
+		if ( $sKind == "Folders" )
+		{
+			$loObjects = $this.loGetObjects( "Folders", $sScope );
+
+			if ( IsEmpty( $loObjects ) )
+				$loObjects = $this.loGetObjects( "Groups", $sScope );
+
+			if ( IsEmpty( $loObjects ) and $sScope == "Parents" )
+				$loObjects = $this.loGetObjects( "Breakdowns", $sScope );
+		}
+		else
+			$loObjects = $this.loGetObjects( $sKind, $sScope );
+
+		$loObjects/GetFlexMindNode( $sFormat, $nLevel + 1, $sDirection, $sKind, $sScope, $sDataKey );
+
+	};
+
+	#inline
+	</node>
+	#endinline;
+}
+
+##===========================================================================
+## sNodeName
+##===========================================================================
+variant ::sNodeName( $sDirection )
+{
+	switch ( $sDirection )
+	{
+		case "Center" :	return "center";
+		case "North" :	return "top";
+		case "South" :	return "bottom";
+		case "East"  :	return "right";
+		case "West"  :	return "left";
+		default	:	return "";
+	};
+}
+
+##===========================================================================
+## GetFlexMindSuperNode
+##===========================================================================
+void COG_Base::GetFlexMindSuperNode( $sFormat )
+{
+
+##$debugtrace=true;
+
+	$lsLayout = lsGetSuperNodeLayout( $sFormat );
+
+	## first handle north
+	$sLastDirection = "";
+	$lsLayout/
+	{
+		$sRow = *;
+
+		$vsRowDef = split( $sRow, "|" );
+
+		$sItem = first( $vsRowDef );
+
+		## find out what direction
+		$sDirection = "";
+		if ( $sItem == "Center" or $sItem == "North" or $sItem == "South" or $sItem == "East" or $sItem == "West" )
+			$sDirection = $sItem;
+
+		if ( $sDirection == "Center" )
+		{
+			$sDataKey = pick( $vsRowDef, 1 );
+			$sTagAttrs = pick( $vsRowDef, 2 );
+
+			$sText = $this.sGetData( $sDataKey );
+			$sText = Item( $sText, 1, 1, eoi );
+			$sColor = $this.sGetFlexColor();
+
+			#inline
+			<supernode sRef="<%$this.Ref%>" sColor="<%$sColor%>" <%$sTagAttrs%> sText="<%$sText%>">
+			#endinline;
+		}
+		else if ( $sDirection != "" )
+		{
+			if ( $sDirection != $sLastDirection )
+			{
+				if ( $sLastDirection != "" )
+					"</" + ::sNodeName( $sLastDirection ) + ">";
+
+				$sTagAttrs = pick( $vsRowDef, 1 );
+
+				"<" + ::sNodeName( $sDirection ) + " " + $sTagAttrs + " >";
+
+				$sLastDirection = $sDirection;
+			};
+		}
+		else
+		{
+			$sKind = pick( $vsRowDef, 0 );
+			$sScope = pick( $vsRowDef, 1 );
+			$sDataKey = pick( $vsRowDef, 2 );
+			$sCollationGroup = pick( $vsRowDef, 3 );
+
+
+			if ( $sKind == "Folders" )
+			{
+				## If i am a document, then, folders of interest to me are called sections.
+				##if( $this.bIsDocumentation() )
+				##{
+				##	$sKind = "Sections";
+				##};
+				$loObjects = $this.loGetObjects( $sKind, $sScope );
+
+				if ( IsEmpty( $loObjects ) )
+					$loObjects = $this.loGetObjects( "Groups", $sScope );
+
+				##if ( IsEmpty( $loObjects ) and $sScope == "Parents" )
+				##	$loObjects = $this.loGetObjects( "Breakdowns", $sScope );
+			}
+			else
+				$loObjects = $this.loGetObjects( $sKind, $sScope );
+
+
+			if ( Not IsEmpty( $loObjects ) )
+			{
+				if ( $sCollationGroup != "" )
+				{
+					$sGroupText = Item( $sCollationGroup, 1, 1, ";" );
+					$sGroupColor = Item( $sCollationGroup, 2, 2, ";" );
+					$sGroupExpand = Item( $sCollationGroup, 3, 3, ";" );
+
+					if ( $sGroupColor == "" ) $sGroupColor = "Yellow";
+					if ( $sGroupExpand == "" ) $sGroupExpand = "1";
+
+					#inline
+					<node sText="<%$sGroupText%>" sColor="<%$sGroupColor%>" bShowKids="<%$sGroupExpand%>" >
+					#endinline;
+				};
+
+				$loObjects/GetFlexMindNode( $sFormat, 1, $sLastDirection, $sKind, $sScope, $sDataKey );
+
+				if ( $sCollationGroup != "" )
+					"</node>";
+
+			};
+		};
+	};
+
+	if ( $sLastDirection != "" )
+		"</" + ::sNodeName( $sLastDirection ) + ">";
+
+	#inline
+	</supernode>
+	#endinline;
+}
+
+##===========================================================================
+## lsGetSuperNodeLayout( $sDirection )
+##===========================================================================
+variant COG_Base::lsGetSuperNodeLayout( $sFormat )
+{
+	$lsResponse = CList();
+
+	switch ( $sFormat )
+	{
+		case "Standard":
+			$lsResponse		<< "Center|sDescription|iX=""center"" iY=""center"" sNodeStyle=""RoundRect"" iFixedWidth=""250"" ";
+
+			break;
+
+	};
+
+	return $lsResponse;
+}
+
+##===========================================================================
+## lsGetNodeLayout
+##===========================================================================
+variant COG_Base::lsGetNodeLayout( $sFormat, $sDirection )
+{
+	$bFound = false;
+	$lsResults = CList();
+
+	$lsLayout = lsGetSuperNodeLayout( $sFormat );
+	$lsLayout/
+	{
+		$sRow = *;
+
+		$vsRowDef = split( $sRow, "|" );
+
+		$sItem = first( $vsRowDef );
+
+		## find out what direction
+		$sDir = "";
+		if ( $sItem == "Center" or $sItem == "North" or $sItem == "South" or $sItem == "East" or $sItem == "West" )
+			$sDir = $sItem;
+
+		if ( $bFound and $sDir != "" )
+			return $lsResults;
+
+		if ( $sDir == $sDirection )
+			$bFound = true;
+
+		if ( $bFound and $sDir == "" )
+			$lsResults << $sRow;
+	};
+
+	return $lsResults;
+}
+##===========================================================================
+## loGetObjectsFromProject
+##===========================================================================
+variant COG_Base::loGetObjectsFromProject($sRequest)
+{
+	$loObjects = CList();
+	return $loObjects;
+}
+##===========================================================================
+## GetChoices_Builtin
+##===========================================================================
+variant COG_Base::GetChoices_Builtin( $sShowingWhat )
+{
+	$sResponse = "";
+	switch( $sShowingWhat )
+	{
+		##RETURNS THE REF OF EACH OBJECT AS OPPOSED TO THE DESCRIPTION
+		case "PeopleAndGroups":
+		case "UserGroups":
+			$oApp = COG_AppObj::oGet_s();
+			$loItems = $oApp.loGetObjects_b( $sShowingWhat, "Below" );
+			if ( Not IsEmpty( $loItems ) )
+			{
+				$lsItems = COG_Base::lsFormatObjectsAsChoices_s( $sShowingWhat, $loItems );
+				$sResponse = join( $lsItems, "|" );
+			};
+
+			break;
+
+		case "People":
+			$loPossibleOwners = CList();
+			$loPossibleOwners << /'Data Vault 1/'/COG_Person&[Not bDeleted];
+
+			## sort the names
+			$lsItems = COG_Base::lsFormatObjectsAsChoices_s( $sShowingWhat, $loPossibleOwners );
+			$soUniqNames = GetUnique( $lsItems );
+
+			$sResponse = join( $soUniqNames, "|" );
+			break;
+
+		case "LoginUsers":
+		case "ConfigUsers":
+		case "ConfigAuthors":
+			$loPossibleOwners = CList();
+			$loPossibleOwners << /'Data Vault 1/'/COG_Person&[Not bDeleted][ bLoginUser ][ bLoginAllowed ];
+
+			if ( $sShowingWhat == "ConfigUsers" )
+				$loPossibleOwners = $loPossibleOwners[ sGetMapValue( "B", "bCustomize" ) OR sGetMapValue( "B", "bConfigApproval" ) ];
+			else if ( $sShowingWhat == "ConfigAuthors" )
+				$loPossibleOwners = $loPossibleOwners[ sGetMapValue( "B", "bCustomize" ) ];
+
+			## sort the names
+			$lsItems = COG_Base::lsFormatObjectsAsChoices_s( $sShowingWhat, $loPossibleOwners );
+			$soUniqNames = GetUnique( $lsItems );
+
+			$sResponse = join( $soUniqNames, "|" );
+			break;
+
+		case "Owners":
+			$loPossibleOwners = CList();
+
+			## add all people
+			$loPossibleOwners << /'Data Vault 1/'/COG_Person&[NOT bDeleted][NOT bIsDisabled()];
+
+			## add all global groups
+			$loPossibleOwners << /'Data*'/COG_Group&[NOT bDeleted][NOT bIsDisabled()];
+
+			$lsItems = COG_Base::lsFormatObjectsAsChoices_s( $sShowingWhat, $loPossibleOwners );
+			$sResponse = Join( $lsItems, "|" );
+			$sResponse = "@|" + $sResponse;
+
+			break;
+		case "Date":
+			$sResponse =  "Today at |This morning|This afternoon|Tomorrow at |Tomorrow start|Tomorrow morning|Tomorrow afternoon|Monday at |Monday start|Monday morning|Monday afternoon|Next Monday at |Next Monday start|Next Monday morning|Next Monday afternoon|Tuesday at |Tuesday start|Tuesday morning|Tuesday afternoon|Next Tuesday at |Next Tuesday start|Next Tuesday morning|Next Tuesday afternoon|Wednesday at |Wednesday start|Wednesday morning|Wednesday afternoon|Next Wednesday at |Next Wednesday start|Next Wednesday morning|Next Wednesday afternoon|Thursday at |Thursday start|Thursday morning|Thursday afternoon|Next Thursday at |Next Thursday start|Next Thursday morning|Next Thursday afternoon|Friday at |Friday start|Friday morning|Friday afternoon|Next Friday at |Next Friday start|Next Friday morning|Next Friday afternoon|Middle of this week|End of this week|Beginning of next week|Middle of next week|End of next week|Middle of this month|End of this month|Beginning of next month|Middle of next month|End of next month|Middle of this year|End of this year|Beginning of next year|Middle of next year|End of next year|Beginning of January|Middle of January|End of January|Beginning of Febuary|Middle of Febuary|End of Febuary|Beginning of March|Middle of March|End of March|Beginning of April|Middle of April|End of April|Beginning of May|Middle of May|End of May|Beginning of June|Middle of June|End of June|Beginning of July|Middle of July|End of July|Beginning of August|Middle of August|End of August|Beginning of September|Middle of September|End of September|Beginning of October|Middle of October|End of October|Beginning of November|Middle of November|End of November|Beginning of December|Middle of December|End of December";
+			break;
+		case "Time":
+			$sResponse =  "Today at |Tomorrow at |Monday at |Next Monday at |Tuesday at |Next Tuesday at |Wednesday at |Next Wednesday at |Thursday at |Next Thursday at |Friday at |Next Friday at ";
+			break;
+		case "Importance":
+			$sResponse = "High|Medium|Low|";
+			break;
+		case "Effort":
+			$sResponse = "A few minutes|15 minutes or so|Half hour or so|Less than an hour|An hour or so|A few hours|Half day or so|Less than a day|A day or so|A few days|Less than a week|A week or so|A few weeks|Less than a month|A month or so|A few months|Six or so months|Less than a year|A year or so|A few years|Years";
+			break;
+		case "Units":
+			## We need to cache this here because it is used on the backend so it won't be cached on the front end
+			$sResponse = GetDaoContext( "sUnitChoices" );
+			if ( $sResponse == NULL )
+			{
+				$sResponse = "dollars|$|$M|$K|Euros|in|ft|yd|m|mm|mile|cm|km|degree|radian|sq in|sq ft|sq yd|sq mi|sq mm|sq cm|sq m|sq km|cu in|cu ft|cu yd|cu mm|cu cm|cu m|qt|gl|l|oz|lb|ton|g|kg|C|F|K|lbf|N|psi|ksi|kPa|kN/sq m|lb/cu ft|g/cu cm|amp|ohm|volt|Btu|ft lbf|J|lux|erg/s|horsepower|s|minute|hour|day|year|ft/s|mi/h|kh/h|m/s|m/s^2|in/s|in/s^2|A|V|VDC|VAC|inches";
+				$sResponse = $sResponse + "|meter|kilometer|hectometer|dekameter|decimeter|centimeter|millimeter|micrometer|nanometer|picometer|femtometer|attometer|megaparsec|kiloparsec|parsec|light year|MIL|nautical league|league|nautical mile|mile|kiloyard|fathom|yard|foot|link|hand|nail|inch|mil|microinch|angstrom|fermi|pica|point|caliber|radian|degree|grad|minute|second|sign|mil|revolution|circle|turn|quadrant|sextant|meter^2|kilometer^2|hectometer^2|dekameter^2|decimeter^2|centimeter^2|millimeter^2|micrometer^2|nanometer^2|hectare|mile^2|yard^2|foot^2|inch^2|circular inch|acre|mil^2|circular mil|meter^3|kilometer^3|centimeter^3|millimeter^3|liter|gigaliter|megaliter|kiloliter|hectoliter|dekaliter|deciliter|centiliter|milliliter|microliter|nanoliter|picoliter|femtoliter|attoliter|cc|drop|barrel (US)|barrel (UK)|gallon (US)|gallon (UK)|quart (US)|quart (UK)|pint (US)|pint (UK)|cup (US)|cup (metric)|cup (UK)|fluid ounce (US)|fluid ounce (UK)|tablespoon (US)|tablespoon (metric)|tablespoon (UK)|teaspoon (US)|teaspoon (metric)|teaspoon (UK)|mile^3|yard^3|foot^3|inch^3|ton register|ccf|hundred-foot^3|acre-foot|acre-inch|dekastere|stere|decistere|board foot|liter|barrel dry (US)|pint dry (US)|quart dry (US)|peck (US)|peck (UK)|bushel (US)|bushel (UK)|second|millisecond|microsecond|nanosecond|picosecond|femtosecond|attosecond|minute|hour|day|week|month|meter/second|meter/hour|meter/minute|kilometer/hour|kilometer/minute|kilometer/second|centimeter/hour|centimeter/minute|centimeter/second|millimeter/hour|millimeter/minute|millimeter/second|foot/hour|foot/minute|foot/second|yard/hour|yard/minute|yard/second|mile/hour|mile/minute|mile/second|knot|meter/second^2|kilometer/second^2|hectometer/second^2|dekameter/second^2|decimeter/second^2|centimeter/second^2|millimeter/second^2|micrometer/second^2|nanometer/second^2|picometer/second^2|femtometer/second^2|attometer/second^2|gal|mile/second^2|yard/second^2|foot/second^2|inch/second^2|Acceleration of gravity|radian/second|radian/day|radian/hour|radian/minute|degree/day|degree/hour|degree/minute|degree/second|revolution/day|revolution/hour|revolution/minute|revolution/second|radian/second^2|radian/minute^2|revolution/second^2|revolution/minute/second|revolution/minute^2|kilogram|gram|exagram|petagram|teragram|gigagram|megagram|hectogram|dekagram|decigram|centigram|milligram|microgram|nanogram|picogram|femtogram|attogram|dalton|kilogram-force second^2/meter|kilopound|kip|slug|pound-force second^2/foot|pound|ounce|poundal|ton (short)|ton (long)|ton (assay) (US)|ton (assay) (UK)|ton (metric)|kiloton (metric)|quintal (metric)|hundredweight (US)|hundredweight (UK)|quarter (US)|quarter (UK)|stone (US)|stone (UK)|tonne|pennyweight|carat|grain|gamma|Planck mass|Atomic mass unit|Electron mass (rest)|Muon mass|Proton mass|Neutron mass|Deuteron mass|Earth's mass|Sun's mass|kilogram/meter^3|kilogram/centimeter^3|gram/meter^3|gram/centimeter^3|gram/millimeter^3|milligram/meter^3|milligram/centimeter^3|milligram/millimeter^3|exagram/liter|petagram/liter|teragram/liter|gigagram/liter|megagram/liter|kilogram/liter|hectogram/liter|dekagram/liter|gram/liter|decigram/liter|centigram/liter|milligram/liter|microgram/liter|nanogram/liter|picogram/liter|femtogram/liter|attogram/liter|pound/inch^3|pound/foot^3|pound/yard^3|pound/gallon (US)|pound/gallon (UK)|ounce/inch^3|ounce/foot^3|ounce/gallon (US)|ounce/gallon (UK)|grain/gallon (US)|grain/gallon (UK)|grain/foot^3|ton (short)/yard^3|ton (long)/yard^3|slug/foot^3|psi/1000 feet|meter^3/kilogramm|centimeter^3/gram|liter/kilogram|liter/gram|foot^3/kilogram|foot^3/pound|gallon (US)/pound|gallon (UK)/pound|newton|exanewton|petanewton|teranewton|giganewton|meganewton|kilonewton|hectonewton|dekanewton|decinewton|centinewton|millinewton|micronewton|nanonewton|piconewton|femtonewton|attonewton|dyne|joule/meter|joule/centimeter|gram-force|kilogram-force|ton-force (short)|ton-force (long)|ton-force (metric)|kip-force|kilopound-force|pound-force|ounce-force|poundal|pound foot/second^2|pond|kilopond|pascal|exapascal|petapascal|terapascal|gigapascal|megapascal|kilopascal|hectopascal|dekapascal|decipascal|centipascal|millipascal|micropascal|nanopascal|picopascal|femtopascal|attopascal|newton/meter^2|newton/centimeter^2|newton/millimeter^2|kilonewton/meter^2|bar|millibar|microbar|dyne/centimeter^2|kilogram-force/meter^2|kilogram-force/centimeter^2|kilogram-force/millimeter^2|gram-force/centimeter^2|ton-force (short)/foot^2|ton-force (short)/inch^2|ton-force (long)/foot^2|ton-force (long)/inch^2|kip-force/inch^2|ksi|pound-force/foot^2|pound-force/inch^2|psi|poundal/foot^2|torr|centimeter mercury (0�C)|millimeter mercury (0�C)|inch mercury (32�F)|inch mercury (60�F)|centimeter water (4�C)|millimeter water (4�C)|inch water (4�C)|foot water (4�C)|inch water (60�F)|foot water (60�F)|atmosphere technical|Standard atmosphere|kilogram meter^2|kilogram centimeter^2|kilogram millimeter^2|gram centimeter^2|gram millimeter^2|kilogram-force meter second^2|kilogram-force centimeter second^2|ounce inch^2|ounce-force inch second^2|pound foot^2|pound-force foot second ^2|pound inch^2|pound-force inch second^2|slug foot^2|newton meter|kilonewton meter|millinewton meter|micronewton meter|ton-force (short) meter|ton-force (long) meter|ton-force (metric) meter|kilogram-force meter|gram-force centimeter|pound-force foot|poundal foot|poundal inch|newton meter|newton centimeter|newton millimeter|kilonewton meter|dyne meter|dyne centimeter|dyne millimeter|kilogram-force meter|kilogram-force centimeter|kilogram-force millimeter|gram-force meter|gram-force centimeter|gram-force millimeter|ounce-force foot|ounce-force inch|pound-force foot|pound-force inch|joule|gigajoule|megajoule|kilojoule|millijoule|microjoule|nanojoule|attojoule|megaelectron-volt|kiloelectron-volt|electron-volt|erg|gigawatt-hour|megawatt-hour|kilowatt-hour|kilowatt-second|watt-hour|watt-second|newton meter|horsepower hour|horsepower (metric) hour|calorie (IT)|calorie (th)|calorie (nutritional)|Btu (IT)|Btu (th)|mega Btu (IT)|ton-hour (refrigeration)|gigaton|megaton|kiloton|ton (explosives)|dyne centimeter|gram-force meter|gram-force centimeter|kilogram-force centimeter|kilogram-force meter|kilopond meter|pound-force foot|pound-force inch|ounce-force inch|foot-pound|inch-pound|inch-ounce|poundal foot|therm|therm (EC)|therm (US)|Hartree energy|Rydberg constant|meter/liter|exameter/liter|petameter/liter|terameter/liter|gigameter/liter|megameter/liter|kilometer/liter|hectometer/liter|dekameter/liter|centimeter/liter|mile (US)/liter|nautical mile/liter|nautical mile/gallon (US)|kilometer/gallon (US)|meter/gallon (US)|meter/gallon (UK)|mile/gallon (US)|mile/gallon (UK)|meter/meter^3|meter/centimeter^3|meter/yard^3|meter/foot^3|meter/inch^3|meter/quart (US)|meter/quart (UK)|meter/pint (US)|meter/pint (UK)|meter/cup (US)|meter/cup (UK)|meter/fluid ounce (US)|meter/fluid ounce (UK)|liter/meter|liter/100 km|gallon (US)/mile|gallon (US)/100 mi|gallon (UK)/mile|gallon (UK)/100 mi|joule/kilogram|kilojoule/kilogram|calorie (IT)/gram|calorie (th)/gram|Btu (IT)/pound|Btu (th)/pound|kilogram/joule|kilogram/kilojoule|gram/calorie (IT)|gram/calorie (th)|pound/Btu (IT)|pound/Btu (th)|pound/horsepower/hour|gram/horsepower (metric)/hour|gram/kilowatt/hour|joule/meter^3|joule/liter|megajoule/meter^3|kilojoule/meter^3|kilocalorie (IT)/meter^3|calorie (IT)/centimeter^3|therm/foot^3|therm/gallon (UK)|Btu (IT)/foot^3|Btu (th)/foot^3|CHU/foot^3|meter^3/joule|liter/joule|gallon (US)/horsepower|gallon (US)/horsepower (metric)|watt|exawatt|petawatt|terawatt|gigawatt|megawatt|kilowatt|hectowatt|dekawatt|deciwatt|centiwatt|milliwatt|microwatt|nanowatt|picowatt|femtowatt|attowatt|horsepower (metric)|horsepower (boiler)|horsepower (electric)|horsepower (water)|pferdestarke (ps)|Btu (IT)/hour|Btu (IT)/minute|Btu (IT)/second|Btu (th)/hour|Btu (th)/minute|Btu (th)/second|MBtu (IT)/hour|MBH|ton (refrigeration)|kilocalorie (IT)/hour|kilocalorie (IT)/minute|kilocalorie (IT)/second|kilocalorie (th)/hour|kilocalorie (th)/minute|kilocalorie (th)/second|calorie (IT)/hour|calorie (IT)/minute|calorie (IT)/second|calorie (th)/hour|calorie (th)/minute|calorie (th)/second|foot pound-force/hour|foot pound-force/minute|foot pound-force/second|pound-foot/hour|pound-foot/minute|pound-foot/second|erg/second|kilovolt ampere|volt ampere|newton meter/second|joule/second|exajoule/second|petajoule/second|terajoule/second|gigajoule/second|megajoule/second|kilojoule/second|hectojoule/second|dekajoule/second|decijoule/second|centijoule/second|millijoule/second|microjoule/second|nanojoule/second|picojoule/second|femtojoule/second|attojoule/second|joule/hour|joule/minute|kilojoule/hour|kilojoule/minute|kelvin|degree Celsius|degree Fahrenheit|degree Rankine|degree Reaumur|kelvin|degree Celsius|degree centigrade|degree Fahrenheit|degree Rankine|degree Reaumur|length/lenght/kelvin|length/lenght/degree Celsius|length/lenght/degree Fahrenheit|length/lenght/degree Rankine|length/lenght/degree Reaumur|kelvin/watt|degree Fahrenheit hour/Btu (IT)|degree Fahrenheit hour/Btu (th)|degree Fahrenheit second/Btu (IT)|degree Fahrenheit second/Btu (th)|watt/meter/K|watt/centimeter/�C|kilowatt/meter/K|calorie (IT)/second/centimeter/�C|calorie (th)/second/centimeter/�C|kilocalorie (IT)/hour/meter/�C|kilocalorie (th)/hour/meter/�C|Btu (IT) inch/second/foot^2/�F|Btu (th) inch/second/foot^2/�F|Btu (IT) foot/hour/foot^2/�F|Btu (th) foot/hour/foot^2/�F|Btu (IT) inch/hour/foot^2/�F|Btu (th) inch/hour/foot^2/�F|joule/kilogram/K|joule/kilogram/�C|joule/gram/�C|kilojoule/kilogram/K|kilojoule/kilogram/�C|calorie (IT)/gram/�C|calorie (IT)/gram/�F|calorie (th)/gram/�C|kilocalorie (IT)/kilogram/�C|kilocalorie (th)/kilogram/�C|kilocalorie (IT)/kilogram/K|kilocalorie (th)/kilogram/K|kilogram-force meter/kilogram/K|pound-force foot/pound/�R|Btu (IT)/pound/�F|Btu (th)/pound/�F|Btu (IT)/pound/�R|Btu (th)/pound/�R|Btu (IT)/pound/�C|CHU/pound/�C|joule/meter^2|calorie (th)/centimeter^2|langley|Btu (IT)/foot^2|Btu (th)/foot^2|watt/meter^2|kilowatt/meter^2|watt/centimeter^2|watt/inch^2|joule/second/meter^2|kilocalorie (IT)/hour/meter^2|kilocalorie (IT)/hour/foot^2|calorie (IT)/second/centimeter^2|calorie (IT)/minute/centimeter^2|calorie (IT)/hour/centimeter^2|calorie (th)/second/centimeter^2|calorie (th)/minute/centimeter^2|calorie (th)/hour/centimeter^2|dyne/hour/centimeter|erg/hour/millimeter^2|foot pound/minute/foot^2|horsepower/foot^2|horsepower (metric)/foot^2|Btu (IT)/second/foot^2|Btu (IT)/minute/foot^2|Btu (IT)/hour/foot^2|Btu (th)/second/inch^2|Btu (th)/second/foot^2|Btu (th)/minute/foot^2|Btu (th)/hour/foot^2|CHU/hour/foot^2|watt/meter^2/K|watt/meter^2/�C|joule/second/meter^2/K|calorie (IT)/second/centimeter^2/�C|kilocalorie (IT)/hour/meter^2/�C|kilocalorie (IT)/hour/foot^2/�C|Btu (IT)/second/foot^2/�F|Btu (th)/second/foot^2/�F|Btu (IT)/hour/foot^2/�F|Btu (th)/hour/foot^2/�F|CHU/hour/foot^2/�C|meter^3/second|meter^3/day|meter^3/hour|meter^3/minute|centimeter^3/day|centimeter^3/hour|centimeter^3/minute|centimeter^3/second|liter/day|liter/hour|liter/minute|liter/second|milliliter/day|milliliter/hour|milliliter/minute|milliliter/second|gallon (US)/day|gallon (US)/hour|gallon (US)/minute|gallon (US)/second|gallon (UK)/day|gallon (UK)/hour|gallon (UK)/minute|gallon (UK)/second|kilobarrel (US)/day|barrel (US)/day|barrel (US)/hour|barrel (US)/minute|barrel (US)/second|acre-foot/year|acre-foot/day|acre-foot/hour|hundred-foot^3/day|hundred-foot^3/hour|hundred-foot^3/minute|ounce/hour|ounce/minute|ounce/second|ounce (UK)/hour|ounce (UK)/minute|ounce (UK)/second|yard^3/hour|yard^3/minute|yard^3/second|foot^3/hour|foot^3/minute|foot^3/second|inch^3/hour|inch^3/minute|inch^3/second|kilogram/second|gram/second|gram/minute|gram/hour|gram/day|milligram/minute|milligram/hour|milligram/day|kilogram/minute|kilogram/hour|kilogram/day|exagram/second|petagram/second|teragram/second|gigagram/second|megagram/second|hectogram/second|dekagram/second|decigram/second|centigram/second|milligram/second|microgram/second|ton (metric)/second|ton (metric)/minute|ton (metric)/hour|ton (metric)/day|ton (short)/hour|pound/second|pound/minute|pound/hour|pound/day|mol/second|examol/second|petamol/second|teramol/second|gigamol/second|megamol/second|kilomol/second|hectomol/second|dekamol/second|decimol/second|centimol/second|millimol/second|micromol/second|nanomol/second|picomol/second|femtomol/second|attomol/second|mol/minute|mol/hour|mol/day|millimol/minute|millimol/hour|millimol/day|kilomol/minute|kilomol/hour|kilomol/day|gram/second/meter^2|kilogram/hour/meter^2|kilogram/hour/foot^2|kilogram/second/meter^2|gram/second/centimeter^2|pound/hour/foot^2|pound/second/foot^2|mol/meter^3|mol/liter|mol/centimeter^3|mol/millimeter^3|kilomol/meter^3|kilomol/liter|kilomol/centimeter^3|kilomol/millimeter^3|millimol/meter^3|millimol/liter|millimol/centimeter^3|millimol/millimeter^3|kilogram/liter|gram/liter|milligram/liter|part/million (ppm)|grain/gallon (US)|grain/gallon (UK)|pound/gallon (US)|pound/gallon (UK)|pound/million gallon (US)|pound/million gallon (UK)|pound/foot^3|pascal second|kilogram-force second/meter^2|newton second/meter^2|millinewton second/meter^2|dyne second/centimeter^2|poise|exapoise|petapoise|terapoise|gigapoise|megapoise|kilopoise|hectopoise|dekapoise|decipoise|centipoise|millipoise|micropoise|nanopoise|picopoise|femtopoise|attopoise|pound-force second/inch^2|pound-force second/foot^2|poundal second/foot^2|gram/centimeter/second|slug/foot/second|pound/foot/second|pound/foot/hour|meter^2/second|meter^2/hour|centimeter^2/second|millimeter^2/second|foot^2/second|foot^2/hour|inch^2/second|stokes|exastokes|petastokes|terastokes|gigastokes|megastokes|kilostokes|hectostokes|dekastokes|decistokes|centistokes|millistokes|microstokes|nanostokes|picostokes|femtostokes|attostokes|newton/meter|millinewnon/meter|gram-force/centimeter|dyne/centimeter|erg/centimeter^2|erg/millimeter^2|poundal/inch|pound-force/inch|kilogram/pascal/second/meter^2|permeability (0�C)|permeability (23�C)|bel|decibel|candela/meter^2|candela/centimeter^2|candela/foot^2|candela/inch^2|kilocandela/meter^2|stilb|lumen/meter^2/steradian|lumen/centimeter^2/steradian|lumen/foot^2/steradian|watt/centimeter^2/steradian (at 555 nm)|nit|millinit|candle (international)|candle (German)|candle (UK)|decimal candle|candle (pentane)|pentane candle (10 candle power)|hefner candle|lumen/steradian|lux|meter-candle|centimeter-candle|foot-candle|flame|phot|nox|candela steradian/meter^2|lumen/meter^2|lumen/centimeter^2|lumen/foot^2|watt/centimeter^2 (at 555 nm)|dot/meter|dot/millimeter|dot/inch|pixel/inch|hertz|terahertz|gigahertz|megahertz|kilohertz|dekahertz|decihertz|centihertz|millihertz|microhertz|nanohertz|picohertz|femtohertz|attohertz|cycle/second|wavelength in exametres|wavelength in petametres|wavelength in terametres|wavelength in gigametres|wavelength in megametres|wavelength in kilometres|wavelength in hectometres|wavelength in dekametres|wavelength in metres|wavelength in decimetres|wavelength in centimetres|wavelength in millimetres|wavelength in micrometres|Electron Compton wavelength|Proton Compton wavelength|Neutron Compton wavelength|coulomb|megacoulomb|kilocoulomb|millicoulomb|microcoulomb|nanocoulomb|picocoulomb|abcoulomb|EMU of charge|statcoulomb|ESU of charge|franklin|ampere-hour|ampere-minute|ampere-second|faraday (based on carbon 12)|Elementary charge|coulomb/meter|coulomb/centimeter|coulomb/inch|abcoulomb/meter|abcoulomb/centimeter|abcoulomb/inch|coulomb/meter^2|coulomb/centimeter^2|coulomb/inch^2|abcoulomb/meter^2|abcoulomb/centimeter^2|abcoulomb/inch^2|coulomb/meter^3|coulomb/centimeter^3|coulomb/inch^3|abcoulomb/meter^3|abcoulomb/centimeter^3|abcoulomb/inch^3|ampere|kiloampere|milliampere|biot|abampere|EMU of current|statampere|ESU of current|CGS e.m. unit|CGS e.s. unit|ampere/meter|ampere/centimeter|ampere/inch|abampere/meter|abampere/centimeter|abampere/inch|oersted|gilbert/centimeter|ampere/meter^2|ampere/centimeter^2|ampere/inch^2|ampere/mil^2|ampere/cicular mil|abampere/centimeter^2|volt/meter|kilovolt/meter|kilovolt/centimeter|volt/centimeter|millivolt/meter|microvolt/meter|kilovolt/inch|volt/inch|volt/mil|abvolt/centimeter|statvolt/centimeter|statvolt/inch|newton/coulomb|volt|watt/ampere|abvolt|EMU of electric potential|statvolt|ESU of electric potential|ohm|megohm|microhm|volt/ampere|reciprocal siemens|abohm|EMU of resistance|statohm|ESU of resistance|Quantized Hall resistance|ohm meter|ohm centimeter|ohm inch|microhm centimeter|microhm inch|abohm centimeter|statohm centimeter|circular mil ohm/foot|siemens|megasiemens|kilosiemens|millisiemens|microsiemens|ampere/volt|mho|gemmho|micromho|siemens/meter|picosiemens/meter|mho/meter|mho/centimeter|abmho/meter|abmho/centimeter|statmho/meter|statmho/centimeter|farad|exafarad|petafarad|terafarad|gigafarad|megafarad|kilofarad|hectofarad|dekafarad|decifarad|centifarad|millifarad|microfarad|nanofarad|picofarad|femtofarad|attofarad|coulomb/volt|abfarad|statfarad|henry|exahenry|petahenry|terahenry|gigahenry|megahenry|kilohenry|hectohenry|dekahenry|decihenry|centihenry|millihenry|microhenry|nanohenry|picohenry|femtohenry|attohenry|weber/ampere|abhenry|EMU of inductance|stathenry|ESU of inductance|ampere turn|kiloampere turn|milliampere turn|abampere turn|gilbert|ampere/meter|ampere turn/meter|kiloampere/meter|oersted|weber|milliweber|microweber|volt second|unit pole|megaline|kiloline|line|maxwell|tesla meter^2|tesla centimeter^2|gauss centimeter^2|Magnetic flux quantum|tesla|weber/meter^2|weber/centimeter^2|weber/inch^2|maxwell/meter^2|maxwell/centimeter^2|maxwell/inch^2|gauss|line/centimeter^2|line/inch^2|gamma|gray/second|exagray/second|petagray/second|teragray/second|gigagray/second|megagray/second|kilogray/second|hectogray/second|dekagray/second|decigray/second|centigray/second|milligray/second|microgray/second|nanogray/second|picogray/second|femtogray/second|attogray/second|rad/second|joule/kilogram/second|watt/kilogram|sievert/second|rem/second|becquerel|terabecquerel|gigabecquerel|megabecquerel|kilobecquerel|millibecquerel|curie|kilocurie|millicurie|microcurie|nanocurie|picocurie|rutherford|one/second|disintegrations/second|disintegrations/minute|coulomb/kilogram|millicoulomb/kilogram|microcoulomb/kilogram|roentgen|tissue roentgen|parker|rep|rad|millirad|joule/kilogram|joule/gram|joule/centigram|joule/milligram|gray|exagray|petagray|teragray|gigagray|megagray|kilogray|hectogray|dekagray|decigray|centigray|milligray|microgray|nanogray|picogray|femtogray|attogray|bit|nibble|byte|character|word|MAPM-word|quadruple-word|block|kilobit|kilobyte|kilobyte (103 bytes)|megabit|megabyte|megabyte (106 bytes)|gigabit|gigabyte|gigabyte (109 bytes)|terabit|terabyte|terabyte (1012 bytes)|petabit|petabyte|petabyte (1015 bytes)|exabit|exabyte|exabyte (1018 bytes)|bit/second|byte/second|kilobit/second (SI def.)|kilobyte/second (SI def.)|kilobit/second|kilobyte/second|megabit/second (SI def.)|megabyte/second (SI def.)|megabit/second|megabyte/second|gigabit/second (SI def.)|gigabyte/second (SI def.)|gigabit/second|gigabyte/second|terabit/second (SI def.)|terabyte/second (SI def.)|terabit/second|terabyte/second";
+
+				$lsResponse = split( $sResponse, "|" );
+				$lsResponse = GetSorted( $lsResponse );
+
+				$mssUnits = CMap( $lsResponse/Lower(*), $lsResponse );
+
+				$lsResponse = CList();
+				GetUnique( GetKeys( $mssUnits ) )/
+				{
+					$lsResponse << pickrange( $mssUnits, *, * );
+				};
+				$sResponse = join( $lsResponse, "|" );
+				SetDaoContext( "sUnitChoices", $sResponse );
+			};
+			break;
+
+		case "Numbers":
+			$sResponse = "1|2|3|4|5";
+		break;
+		case "Status":
+##			$sResponse = "Not Started|In Process|Waiting|Completed|Closed";
+			$sResponse = "New|Accepted|Clarify|Rejected|Started|Waiting|Halted|Completed";
+			break;
+		case "ChoiceRequests":
+			$lsChoices = lsGetChoiceRequests();
+			$sResponse += "|Custom|" + join( $lsChoices, "|" );
+			break;
+		case "Organizations":
+			$oApp = COG_AppObj::oGet_s();
+			$loOrgs = $oApp.loGetObjects( "Organizations", "Tree" )[CheckASEAccess( false, null)];
+
+			$sChoiceFormat = GetRequest( "sChoiceFormat" );
+			if( $sChoiceFormat == NULL )
+				$sChoiceFormat = "";
+
+			$bXML = $sChoiceFormat == "XML";
+			$sLastOrg = "";
+			if ( $bXML ) {
+				$sLastOrg = $me.oPerson.sGetPersonalPref("ProjectDialog_LastOrganization");
+				if ( NOT $sLastOrg ) {
+					$sLastOrg = "";
+				};
+			};
+
+			$lsResponse = CList();
+			$loOrgs/
+			{
+				$sName = sDescription;
+
+				##add whether or not the default
+				if( $bXML AND $sLastOrg == Ref )
+					$sName += "(DEFAULT)";
+
+				$lsResponse << $sName + EOI + Replace( Ref, "|", "-" );
+			};
+
+			if ( $bXML AND ISEmpty( $loOrgs ) ) {
+				$oCorporation = SSC_SystemOrg::oGetCorporation_s();
+				$lsResponse << $oCorporation.sDescription + "(DEFAULT)" + EOI + Replace( $oCorporation.Ref, "|", "-" );
+			};
+
+			$sResponse = join( $lsResponse,  "|" );
+			break;
+		case "Workflows":
+			$oApp = COG_AppObj::oGet_s();
+			$loProcesses = $oApp.loGetObjects( "WorkflowProcesses", "Tree" )[ sApplicableClass == "SSC_Project" ];
+
+			$sChoiceFormat = GetRequest( "sChoiceFormat" );
+			if( $sChoiceFormat == NULL )
+				$sChoiceFormat = "";
+
+			$bXML = $sChoiceFormat == "XML";
+
+			$lsResponse = CList();
+			$loProcesses/
+			{
+				$sName = sDescription;
+
+				##add whether or not the default
+				if( $bXML AND bDefault )
+				{
+					$sName += "(DEFAULT)";
+				};
+
+				$lsResponse << $sName + EOI + Replace( Ref, "|", "-" );
+			};
+			$sResponse = join( $lsResponse,  "|" );
+			break;
+		case "Projects":
+			$oApp = COG_AppObj::oGet_s();
+			$loProjects = SSC_AppObj::loGetObjects_b( "MYPROJECTS", "BELOW" );
+			$msoProjects = CMap( $loProjects/Format( sGetDescription(), ">" ), $loProjects);
+			$sLastKey = "";
+
+			$lsResponse = CList();
+			$msoProjects/
+			{
+				$oProject = *;
+				$sDescription = $oProject.sGetDescription();
+				$sKey = Format( $sDescription, ">" );
+
+				if ( ($sKey == $sLastKey) OR (Count(PickRange($msoProjects, $sKey)) > 1) )
+				{
+					$sId = sGetReleaseId();
+					if ( $sId == "" ) $sId = 'sGetName/ID'();
+					$sDescription += " (" + $sId + ")";
+				};
+				$sLastKey = $sKey;
+
+				$lsResponse << $sDescription + EOI + Replace( Ref, "|", "-" );
+			};
+			$sResponse = join( $lsResponse,  "|" );
+
+			break;
+		case "ConfigLabels":
+			$ssLabels = CSet();
+			$loRegistrars = /'Data*'/AseRegistrar_Local[ NOT pick( msaData, "bStagedImport" ) ];
+			$loRegistrars/{
+				$oReg = *;
+				$ssLabels << $oReg.ssLabels;
+			};
+			$ssLabels = GetUnique( $ssLabels );
+			$sResponse = join( $ssLabels, "|" );
+			break;
+
+		default:
+			if( find( $sShowingWhat, "UDA_" ) != -1 )
+			{
+				## get the registrar
+				$oRegistrar = oGetLocalRegistrar();
+
+				## Get the cached attribute and call it for the choices
+				$oThis = *;
+				$oUDA = $oRegistrar.oGetAttributeFromCache_s( $sShowingWhat, $oThis.classname );
+
+				## get pick from choices
+				$sResponse = "";
+				$bPickFrom = $oUDA.bIsPickFrom();
+				if ( $bPickFrom )
+				{
+					$vsPickList = $oUDA.vsGetPickFrom( $oThis );
+					$sResponse = "@||" + join( $vsPickList, "|" );
+				};
+			}
+			else
+			{
+				$sResponse = COG_Base::sGetChoices_b( $sShowingWhat, "" );
+			};
+	};
+	return $sResponse;
+}
+##===========================================================================
+## lsFormatObjectsAsChoices_s
+##===========================================================================
+variant COG_Base::lsFormatObjectsAsChoices_s( $sChoiceRequest, $loObjects )
+{
+	$lsObjects = CList();
+
+	switch ( $sChoiceRequest ) {
+		case "PeopleAndGroups":
+		case "UserGroups":
+			$loObjects[ * kindof "COG_GroupedObj" ]/{
+				$sPrefix = "";
+				if ( className == "COG_Group" ) {
+					$sPrefix += "G:";
+				};
+				$lsObjects << $sPrefix + sGetName() + EOI + Replace( Ref, "|", "-" );
+			};
+			break;
+		case "LoginUsers":
+		case "Owners":
+		case "People":
+			$loObjects[ * kindof "COG_GroupedObj" ]/{
+				$sName = "";
+				if ( className == "COG_Group" ) {
+					$sName += "G:";
+				};
+				$sName += sGetName();
+				$lsObjects << $sName + EOI + $sName;
+			};
+			break;
+		case "ConfigUsers":
+		case "ConfigAuthors":
+			$loObjects[ * kindof "COG_GroupedObj" ]/{
+				$lsObjects << sGetName() + EOI + sGetLoginName();
+			};
+			break;
+	};
+
+	return $lsObjects;
+}
+##===========================================================================
+## lsGetChoiceRequests_Builtin
+##===========================================================================
+variant COG_Base::lsGetChoiceRequests_Builtin()
+{
+	$lsRetval = CList();
+
+	$lsRetval << "PeopleAndGroups" + EOI + "PeopleAndGroups";
+	$lsRetval << "UserGroups" + EOI + "UserGroups";
+	$lsRetval << "People" + EOI + "People";
+	$lsRetval << "LoginUsers" + EOI + "LoginUsers";
+	$lsRetval << "Owners" + EOI + "Owners";
+	$lsRetval << "Date" + EOI + "Date";
+	$lsRetval << "Time" + EOI + "Time";
+	$lsRetval << "Importance" + EOI + "Importance";
+	$lsRetval << "Effort" + EOI + "Effort";
+	$lsRetval << "Units" + EOI + "Units";
+	$lsRetval << "Numbers" + EOI + "Numbers";
+	$lsRetval << "Status" + EOI + "Status";
+
+	$lsRetval << super::lsGetChoiceRequests_Builtin();
+
+	return GetUnique( $lsRetval );
+}
+
+void COG_Base::GetAdhocChartSimple( $sType, $sTitle, $sCustomRequest, $sAttribute,  $sColors, $sWidth, $sLeftMargin, $sNumberFormat )
+{
+	$loObjectsInCol = loGetObjects( "Custom", $sCustomRequest );
+
+	$msoResponses = CMap( $loObjectsInCol/sGetData( $sAttribute ), $loObjectsInCol );
+
+	$nResponses = count( $msoResponses );
+
+	$lsBarValues = CList();
+	$lsBars = GetUnique( GetKeys( $msoResponses ) );
+	if ( $nResponses > 0 )
+	$lsBarValues << $lsBars/CStr( CInt( 100 * Count( pickrange( $msoResponses, * ) ) Div $nResponses )  );
+
+	## construct the strings that our chart wants
+	$lsBarLabels = CList();
+	$lsBars/
+	{
+		$nItemcount = Itemcount( *, EOI );
+		$lsBarLabels << Item( *, $nItemcount, $nItemcount, EOI );
+	};
+
+	$sBarLabels = urlencode( join( $lsBarLabels,  "|" ));
+	$sBarValues = join( $lsBarValues,  "|" );
+
+	## prepare a few more variables for the chart
+	$sTitle = urlencode( $sTitle );
+	$sKeys = "";
+	$sColors = $sColors ~ "s/\|$/ /g"; ## remove a | at the end if they left one there by accident
+
+	$sLabel = urlencode( $nResponses + " Items" );
+	$sNumberFormat = urlencode( $sNumberFormat );
+
+	## get the width of the column
+	$sWidth = $sWidth ~ "s/in|%|px/ /";
+	if ( $sWidth == "" )
+		$sWidth = "3";
+	$sWidthInPixels = CInt( CReal( $sWidth ) * 96  );
+
+	## get the left margin width for the bar chart
+	$sLeftMargin = $sLeftMargin ~ "s/in|%|px/ /";
+	$sLeftMargin = $sLeftMargin == "" ? "2" : $sLeftMargin;
+	$sLeftMarginInPixels = CInt( CReal( $sLeftMargin ) * 96 );
+
+	## fiddle with the height that we'll need
+	$nBars = Count( $lsBars );
+	$nHeight = 40 + ( 15 * $nBars );
+	if ( $sTitle != "" )
+		$nHeight += 40;
+
+	$sBarLabels = replace( $sBarLabels, "#", " " ); ## can't handle #
+	if ( trim( $sBarLabels ) == "" )
+	{
+		#inline
+		<div style="width:<%trim($sWidth)%>in;text-align:center;margin-bottom:.5in;"><b><%htmlencode( urldecode($sTitle) )%></b><br><br>No Data</div>
+		#endinline;
+	}
+	else if ( $sType == "Hor. Bar Chart" )
+	{
+		::BarChartHor( $sTitle, $sWidthInPixels, $nHeight, $sBarLabels, $sBarValues, $sKeys, $sColors, $sLabel, $sNumberFormat, $sLeftMarginInPixels  );
+	}
+	else if ( $sType == "Pie Chart" )
+	{
+		## when exporting, protect against cases of 100% because grapl doesn't like creating images with that value (they show up blank!)
+		if ( GetRequest( "sExport" ) != null and ItemCount( urldecode( $sBarLabels ), "|" ) == 1 )
+		{
+			#inline
+			<div style="width:<%trim($sWidth)%>in;text-align:center;margin-bottom:.5in;"><b><%htmlencode( urldecode($sTitle) )%></b><br><br>100%<br><%$sBarLabels%></div>
+			#endinline;
+		}
+		else
+			::PieChart( $sTitle, $sWidthInPixels, $sWidthInPixels-20, "", $sBarValues, $sColors, $sBarLabels, $sLabel );
+	};
+
+
+
+
+}
+
+void COG_Base::GetAdhocChartHSBar( $sTitle, $sCustomRequest, $sCustomRequest2, $sAttribute, $sKeys, $sColors, $sLabel, $sWidth, $sLeftMargin, $sNumberFormat )
+{
+	## get the objects and filter if necessary
+	$loObjectsInCol = loGetObjects( "Custom", $sCustomRequest );
+
+	## seems like the right order if we reverse the list (?)
+	$loObjectsInCol = GetReverse( $loObjectsInCol );
+
+	## for each of the objects, we're going to get a second-level set of associated objects
+	## and ask each one a question about status or something. Rather, then replying with "Checked out",
+	## they will tell us which group they below to, which can be any integer from 1 to 5. These
+	## groups may correspond to "Checkout out" or "Red" or "Untested" or any other logical
+	## measure that the person is creating the chart for. In the end, we'll count how many
+	## are in each group and combined they will make up the pieces of a single horizontal
+	## stacked bar. Then the next first-level object will do the same thing and create its
+	## single stacked bar. When all is done, you'll have as many bars as you had top level
+	## objects and each one will tell how many associated items fall into each group.
+	$lsVals = CList();
+	$lsBarLabels = CList();
+	$nResponses = count( $loObjectsInCol );
+	$loObjectsInCol/
+	{
+		## Remember me in case the lower level object need to consider something about me
+		SetRequest( "StackedParentObject", * );
+
+		## capture the object's name
+		$sItemLabel = "";
+		if ( sGetTagType() == "SEC" )
+			$sItemLabel =  " "+ sGetData( "sSectionNumber" );
+		$sItemLabel = sGetDescriptionWithId() + $sItemLabel;
+		$lsBarLabels << urlencode( trim( $sItemLabel ) );
+
+		## now go fetch some additional objects related to obj
+		$loNextObjs = loGetObjects( "Custom", $sCustomRequest2 );
+		$lsNextVals = $loNextObjs/sGetData( $sAttribute );
+
+		## tally up their results
+		$i1 = 0; $i2 = 0; $i3 = 0; $i4 = 0; $i5 = 0;
+		$lsNextVals/
+		{
+			switch ( * )
+			{
+				case 1: $i1 += 1;break;
+				case 2: $i2 += 1;break;
+				case 3: $i3 += 1;break;
+				case 4: $i4 += 1;break;
+				case 5: $i5 += 1;break;
+				default: $i5 += 1;break;
+			};
+		};
+
+		## stringify and remember the answer for this one object, which will look like "3|5|1|0|8"
+		$sAggregateResponse = "" + $i1 + "|" + $i2 + "|" + $i3 + "|" + $i4 + "|" + $i5;
+		$lsVals << $sAggregateResponse;
+	};
+
+	## now you have to stringify the values for all the results and get the ready for the chart program
+	$sBarLabels = join( $lsBarLabels, "|" );
+	$sBarValues = join( $lsVals/Item(*,1,1,"|"), "|" );
+	$sBarValues2 = join( $lsVals/Item(*,2,2,"|"), "|" );
+	$sBarValues3 = join( $lsVals/Item(*,3,3,"|"), "|" );
+	$sBarValues4 = join( $lsVals/Item(*,4,4,"|"), "|" );
+	$sBarValues5 = join( $lsVals/Item(*,5,5,"|"), "|" );
+
+	## prepare a few more variables for the chart
+	$sTitle = urlencode( trim( $sTitle ) );
+	$sKeys = urlencode( $sKeys );
+	$sColors = $sColors ~ "s/\|$/ /g"; ## remove a | at the end if they left one there by accident
+	$sLabel = urlencode( $sLabel );
+	$sNumberFormat = urlencode( $sNumberFormat );
+	$sFieldWidth = trim( $sWidth );
+	$sFieldWidth = $sFieldWidth ~ "s/in|%|px/ /";
+	if ( $sFieldWidth == "" )
+		$sFieldWidth = "3";
+	$sWidthInPixels = CInt( CReal( $sFieldWidth ) * 96  );
+	$sLeftMargin = trim( $sLeftMargin );
+	$sLeftMargin = $sLeftMargin ~ "s/in|%|px/ /";
+	if ( $sLeftMargin == "" )
+		$sLeftMargin = "1";
+	$sLeftMarginInPixels = CInt( CReal( $sLeftMargin ) * 96 );
+	$nHeight = 70 + ( 15 * $nResponses );
+	if ( $sTitle != "" )
+		$nHeight += 40;
+
+	## finally, make the chart
+	if ( trim( $sBarLabels ) == "" )
+	{
+		#inline
+		<div style="width:<%trim($sFieldWidth)%>in;text-align:center;margin-bottom:.5in;"><b><%htmlencode( urldecode($sTitle) )%></b><br><br>No Data</div>
+		#endinline;
+	}
+	else
+	{
+		#inline
+		<p>
+			<%
+			   ::BarChartHor( $sTitle, $sWidthInPixels, $nHeight, $sBarLabels, $sBarValues, $sBarValues2, $sBarValues3, $sBarValues4, $sBarValues5, $sKeys, $sColors, $sLabel, $sNumberFormat, $sLeftMarginInPixels );
+			%>
+		</p>
+		#endinline;
+	};
+}
+
+
+void COG_Base::GetAdhocChartBubble( $sTitle, $sCustomRequest, $sAttributeX, $sAttributeY, $sAttributeSize, $sAttributeColor, $sXAxisHighSide, $sXLabel, $sYLabel, $sXLabelEnds, $sYLabelEnds, $sFooter, $sFieldWidth )
+{
+	## making the bubble chart is actually easy...
+	## basically, we're collecting four attributes (Y,X,Size,Color) about a number of objects
+	## each one as a circle ("Bubble") in an x,y plot.
+
+	## get the objects and filter if necessary
+	$loObjectsInCol = loGetObjects( "Custom", $sCustomRequest );
+
+	## and we ask each object, remembering what the tell us
+	$lsLabels = CList(); $lsYValues = CList(); $lsXValues = CList();  $lsSizes = CList(); $lsColors = CList();
+	$loObjectsInCol/
+	{
+		## Label
+		$sLabel = sGetData( "sDescription" );
+		$lsLabels << urlencode( trim( $sLabel ) );
+
+		## Y axis
+		$sYVal = urlencode( trim( CStr( sGetData( $sAttributeY ) ) ) );
+		$lsYValues << ( $sYVal == "" ? "5" : $sYVal );
+
+		## X axis
+		$sXVal = urlencode( trim( CStr( sGetData( $sAttributeX ) ) ) );
+		$sXVal = $sXVal == "" ? "5" : $sXVal;
+		if ( $sXAxisHighSide == "Left" )
+			$sXVal = CStr( Abs( CInt($sXVal) - 10 ) );
+		$lsXValues << $sXVal;
+
+		## Size
+		$sSizeVal = urlencode( trim( CStr( sGetData( $sAttributeSize ) ) ) );
+		$lsSizes  << ( $sSizeVal == "" ? "5" : $sSizeVal );
+
+		## Color
+		$sColor = urlencode( trim( sGetData( $sAttributeColor ) ) );
+		$lsColors << ( $sColor == "" ? "Green" : $sColor );
+	};
+
+	## prepare a few more variables for the chart
+	$sTitle = urlencode( trim( $sTitle ) );
+	$sFieldWidth = trim( $sFieldWidth );
+	$sFieldWidth = $sFieldWidth ~ "s/in|%|px/ /";
+	if ( $sFieldWidth == "" )
+		$sFieldWidth = "3";
+	$sWidthInPixels = CInt( CReal( $sFieldWidth ) * 96  );
+	$sLabels = join( $lsLabels, "|" );
+	$sLabels = replace( $sLabels, "#", " " ); ## can't handle #s
+	$sXValues = join( $lsXValues, "|" );
+	$sYValues = join( $lsYValues, "|" );
+	$sSizes = join( $lsSizes, "|" );
+	$sColors = join( $lsColors, "|" );
+	$sXLabel = urlencode( trim( $sXLabel ) );
+	$sYLabel = urlencode( trim( $sYLabel ) );,
+	$sXLabelEnds = urlencode( trim( $sXLabelEnds ) );,
+	$sYLabelEnds = urlencode( trim( $sYLabelEnds ) );,
+	$sFooter = urlencode( trim( $sFooter ) );
+
+	if ( trim( $sLabels ) == "" )
+	{
+		#inline
+		<div style="width:<%trim($sFieldWidth)%>in;text-align:center;margin-bottom:.5in;"><b><%htmlencode( urldecode($sTitle) )%></b><br><br>No Data</div>
+		#endinline;
+	}
+	else
+	{
+		::BubbleChart( $sTitle, $sWidthInPixels, $sWidthInPixels, $sLabels, $sXValues, $sYValues, $sSizes, $sColors, $sXLabel, $sYLabel, $sXLabelEnds, $sYLabelEnds, $sFooter );
+	};
+}
+##============================================================================
+## bPromptForSubItems_Copy
+##============================================================================
+variant COG_Base::bPromptForSubItems_Copy()
+{
+	return bPromptForSubItems();
+}
+
+#*!***************************************************************************************************
+ * <summary>
+ *
+ * </summary>
+ * <visibility>
+ *
+ * </visibility>
+ * <param name="$sRequest" type="String"></param>
+ * <returns></returns>
+*****************************************************************************************************#
+JSONArray COG_Base::jaGetTableRows( $sRequest ) {
+	JSONArray $jaTableRows;
+	JSONObject $joData;
+	$lmTableRows = lmGetTableRows_b( $sRequest );
+	$lmTableRows/
+	{
+	    $lmRow = *;
+		$joData = ::newJSONObject();
+		$lmRow/
+		{
+			$value = *;
+			$joData.Set($iterkey, $value);
+		};
+		$jaTableRows.Add($joData);
+	};
+
+	return $jaTableRows;
+}
+
+#*!***************************************************************************************************
+ * <summary>
+ *  provide FTA flex mind format
+ * </summary>
+ * <visibility>
+ * 	Internal
+ * </visibility>
+*****************************************************************************************************#
+void COG_Base::GetFTAFormat($sContext, $sShowing, $sNodeStyle, $lsRiskTypes) {
+
+	$oThis = *;
+	$oApp = SSC_AppObj::oGet_s();
+	## output the xml tag on the first line.
+	"<?xml version='1.0'?>";
+	#inline
+	<!--FlexEdit version 1.4.18; Copyright (c) 2006-2011 Process Dynamics, Inc.-->
+	<freeform sZoomFactor="80" sNodeStyle="RoundRect" bFixedWidth="0">
+		<setup>
+			<settings>
+				<setting sName="Type" sAttrName="sTag" >
+					<option sName="Basic Event"	sValue="K_BASIC_EVENT" sDefChild="K_BASIC_EVENT" sDefStyle="With Mitigations" sColor="#c0d8fe"/>
+					<option sName="AND Gate"	sValue="K_AND_GATE" sDefChild="K_BASIC_EVENT" sDefStyle="With Mitigations" sColor="#c0d8fe"/>
+					<option sName="OR Gate"	sValue="K_OR_GATE" sDefChild="K_BASIC_EVENT" sDefStyle="With Mitigations" sColor="#c0d8fe"/>
+					<option sName="Exclusive OR Gate"	sValue="K_XOR_GATE" sDefChild="K_BASIC_EVENT" sDefStyle="With Mitigations" sColor="#c0d8fe"/>
+					<option sName="Mutually Exclusive OR Gate"	sValue="K_MuExOR_GATE" sDefChild="K_BASIC_EVENT" sDefStyle="With Mitigations" sColor="#c0d8fe"/>
+					<option sName="Undeveloped Event"	sValue="K_UNDEVELOPED_EVENT" sDefChild="K_UNDEVELOPED_EVENT" sDefStyle="With Mitigations" sColor="#c0d8fe"/>
+				</setting>
+				<setting sName="<%GetGenString( "Risk Type" )%>" sAttrName="sType" bSep="False">
+					#endinline;
+					$oThis = *;
+					$lsRiskTypes/
+					{
+						$sDisplay = htmlencode(Item( *, 1, 1, EOI ));
+						$sValue = htmlencode(Item( *, 2, 2, EOI ));
+						#inline
+						<option sName='<%$sDisplay%>' sValue='<%$sValue%>'/>
+						#endinline;
+					};
+					#inline
+				</setting>
+			</settings>
+			<formats iImageTheme="<% $oApp.sGetData( "iFTAIcons" ) %>" >
+
+				#endinline;
+
+				$lsTypes = CList( { "BASIC_EVENT", "AND_GATE", "OR_GATE", "XOR_GATE", "MuExOR_GATE", "UNDEVELOPED_EVENT" } );
+
+				$lsTypes/
+				{
+					$sType = *;
+
+					$oThis.GetFTANodeFormat($sType);
+				};
+
+				#inline
+			</formats>
+		</setup>
+		<rootnodes>
+		#endinline;
+
+		if ( $sShowing == "" ) $sShowing = "Groups";
+		GetFlexMindEntry( 99, $sContext, $sShowing, $sNodeStyle, NullObject );
+
+		#inline
+		</rootnodes>
+		<trash>
+		</trash>
+	</freeform>
+	#endinline;
+}
+
+#*!***************************************************************************************************
+ * <summary>
+ *  provide FTA flex mind format
+ * </summary>
+ * <visibility>
+ * 	Internal
+ * </visibility>
+*****************************************************************************************************#
+void COG_Base::GetFTANodeFormat($sType) {
+
+	$oThis = *;
+
+	$sCalcType = "valtype:R,min:0.0,max:1.0";
+	$sResCalcType = "calc:MitFunc( Min, 'Mitigations', $sMitigatedFTAProbability, $sFTAProbability, OR_GATE, $sMitigatedFTAProbability ),calcFormat:'%25.5f'";
+	if ( find( $sType, "GATE" ) > -1 )
+	{
+		$sCalcType = "calc:" + $sType + ",calcFormat:'%25.5f'";
+		$sResCalcType = "calc:MitFunc( Min, 'Mitigations', $sMitigatedFTAProbability, $sFTAProbability, " + $sType + ", $sMitigatedFTAProbability ),calcFormat:'%25.5f'";
+	};
+
+	#inline
+	<format sName="Display Style" sType="K_<%$sType%>">
+		<style sName="Fault Only" sValue="Fault Only" bSuppressBorder="1" sType="table"
+			sFormat="[$sText,align:C,border:TLR,color:B,effects:B];
+					[$sId,align:L,border:LB,width:10c]['Probability',align:C,padr:0,border:B]
+					[$sFTAProbability,<%$sCalcType%>,align:R,width:10c,border:RB];
+					[img:<%$sType%>,align:C,border:T,padb:0]">
+		</style>
+		<style sName="With Mitigations" sValue="With Mitigations" bSuppressBorder="1" sType="table"
+			sFormat="[$sText,align:C,border:TLR,color:B,effects:B];
+					[$sId,align:L,border:LB,width:10c]['Probability',align:C,padr:0,border:B]
+					[$sFTAProbability,<%$sCalcType%>,align:R,width:10c,border:RB];
+					['Mitigations:',align:L,border:TLR];
+
+					{[$sId,align:L,border:L,width:10c][$sText,align:L,padr:0]
+							[$sMitigatedFTAProbability,valtype:R,min:0.0,max:1.0,align:R,width:10c,border:R],set:Mitigations,border:LBR,cmd:AR,sDefChild:M};
+
+					['Residual Probability',align:R,border:LB][$sMitigatedFTAProbability,<%$sResCalcType%>,align:R,width:10c,border:RB];
+					[img:<%$sType%>,align:C,border:T,padb:0]">
+		</style>
+	</format>
+	#endinline;
+}
+
+variant COG_Base::bCanModifyFlexEdit($sRequest, $sContext, $sNodeStyle) {
+	$bCanModify = false;
+	$sCanModify = sOKToModify();
+	if( $sCanModify == "" ) {
+		$bCanModify = true;
+
+		## specially handle project, since FlexEdit cannot be used to modify the project
+		if ( ClassName == "SSC_Project" )
+			$bCanModify = false;
+	} else {
+		##check the workflow state
+		$oState = oGetWorkflowState();
+		$sScope = "Child";
+		$lsRequests = CList( {"REQUIREMENTS","RISKS","TESTS","VOICES","DEFECTS","INITIATIVES"});
+
+		$lsRequests/
+		{
+			if( NOT $bCanModify )
+			{
+				$sObjectRequest = *;
+				$sKey = "bCheckoutRequired" + eoi + $sScope + "," + $sObjectRequest;
+
+				$sValue = CStr( $oState.sGetDataValue( $sKey ) );
+
+				$bCheckoutRequired = Lower($sValue) == "true";
+
+				if( NOT $bCheckoutRequired )
+					$bCanModify = true;
+			};
+		};
+	};
+
+    return $bCanModify;
+}
