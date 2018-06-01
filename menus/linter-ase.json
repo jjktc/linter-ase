@@ -2,7 +2,7 @@
   "context-menu": {
     "atom-text-editor": [
       {
-        "label": "Toggle linter-ase",
+        "label": "Toggle ASE Linter",
         "command": "linter-ase:toggle"
       }
     ]
@@ -12,7 +12,7 @@
       "label": "Packages",
       "submenu": [
         {
-          "label": "linter-ase",
+          "label": "ASE Linter",
           "submenu": [
             {
               "label": "Toggle",

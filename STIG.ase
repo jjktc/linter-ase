@@ -1,0 +1,435 @@
+##===========================================================================
+## GetStigEntry
+##
+## Purpose: Generates a JSONObject with the given attributes, along with its children
+## Based on COG_Base::GetFlexMindEntry()
+##===========================================================================
+JSONObject COG_Base::GetStigEntry( $nLevels, $sContext, $sRequest, $sNodeStyle, $oParent )
+{
+  ## Gather the attributes
+	$sTag = sGetTagType();
+	$sTitle = URLEncode( sGetDescription() );
+	$loMembers = loGetObjects( $sRequest, "Tree" );
+
+  ## Calls base method to create object and children
+  return GetStigEntry( $sTag, $nLevels, $sTitle, $loMembers, $sContext, $sRequest, $sNodeStyle, $oParent );
+}
+
+##===========================================================================
+## GetStigEntry
+##
+## Purpose: Generates a JSONObject with the given attributes, along with its children
+## Based on COG_Base::GetFlexMindEntry()
+##===========================================================================
+JSONObject COG_Base::GetStigEntry( $sTag, $nLevels, $sTitle, $loChildren, $sContext, $sRequest, $sNodeStyle, $oParent )
+{
+  JSONObject $joNode;
+
+  if ( $nLevels < 0 ) return $joNode;
+
+  $bDeep = $nLevels > 0;
+
+  $nLevels -= 1;
+
+  $sColor = sGetFlexColor();
+
+  $sOrigParentRef = "";
+  if ( $oParent != NullObject )
+    $sOrigParentRef = $oParent.Ref;
+
+  $oThis = *;
+
+  ## Add the current node
+  $joNode.Set( "sTag", $sTag );
+  $joNode.Set( "sText", $sTitle );
+  $joNode.Set( "sRef", $oThis.Ref );
+  $joNode.Set( "sOrigParentRef", $sOrigParentRef );
+  $joNode.Set( "sColor", $sColor );
+
+  ## Append all the children
+
+  if ( $bDeep )
+  {
+    JSONArray $joChildren;
+
+    $loChildren/
+    {
+      JSONObject $joChild = GetStigEntry( $nLevels, $sContext, $sRequest, $sNodeStyle, $oThis );
+
+      ## Add child to array
+      $joChildren.Add($joChild);
+    };
+
+    ## Add array to the main node object
+    $joNode.Set( "node", $joChildren );
+  };
+
+  return $joNode;
+}
+
+##===========================================================================
+## GetStigSuperNode
+##===========================================================================
+JSONObject COG_Base::GetStigSuperNode( $nLevels, $sContext, $sRequest, $sNodeStyle, $oParent )
+{
+	JSONObject $joSuperNode;
+	JSONArray $joChildren;
+
+	$lsLayout = lsGetSuperNodeLayout( "Standard" );
+
+	$sOrigParentRef = "";
+
+	$oThis = *;
+
+	$sLastDirection = "";
+	$lsLayout/
+	{
+		$sRow = *;
+		$vsRowDef = split( $sRow, "|" );
+		$sItem = first( $vsRowDef );
+
+		## find out what direction
+		$sDirection = "";
+		if ( $sItem == "Center" or $sItem == "North" or $sItem == "South" or $sItem == "East" or $sItem == "West" )
+			$sDirection = $sItem;
+
+		if ( $sDirection == "Center" )
+		{
+			$sDataKey = pick( $vsRowDef, 1 );
+			$sTagAttrs = pick( $vsRowDef, 2 );
+
+			$sText = $this.sGetData( $sDataKey );
+			$sText = Item( $sText, 1, 1, eoi );
+			$sColor = $this.sGetFlexColor();
+			$sOrigParentRef = $this.Ref;
+
+			## Apply properties to the super node
+			$joSuperNode.Set( "sRef", $sOrigParentRef );
+			$joSuperNode.Set( "sOrigParentRef", $oParent.Ref );
+			$joSuperNode.Set( "sColor", $sColor );
+			$joSuperNode.Set( "sText", $sText );
+			$joSuperNode.Set( "sNodeType", "supernode" );
+		}
+		else if ( $sDirection != "" )
+		{
+			if ( $sDirection != $sLastDirection )
+			{
+				$sTagAttrs = pick( $vsRowDef, 1 );
+				$sLastDirection = $sDirection;
+			}
+		}
+		else
+		{
+			## Now process the children and parent of the super node
+			$sKind = pick( $vsRowDef, 0 );
+			$sScope = pick( $vsRowDef, 1 );
+			$sDataKey = pick( $vsRowDef, 2 );
+			$sCollationGroup = pick( $vsRowDef, 3 );
+
+			if ( $sKind == "Folders" )
+			{
+				$loObjects = $this.loGetObjects( $sKind, $sScope );
+
+				if ( IsEmpty( $loObjects ) )
+					$loObjects = $this.loGetObjects( "Groups", $sScope );
+			}
+			else
+				$loObjects = $this.loGetObjects( $sKind, $sScope );
+
+			if ( Not IsEmpty( $loObjects ) )
+			{
+				## Process either sub groups or sub children
+				JSONObject $joSuperNodeChild = $this.GetStigSuperNodeChild( $loObjects, $sCollationGroup, $sLastDirection, $sKind, $sScope, $sDataKey, $oThis );
+
+				if ( $sCollationGroup != "" )
+				{
+					## Can be added like normal
+					$joChildren.Add( $joSuperNodeChild );
+				}
+				else
+				{
+					## Remove unnecessary Array inside of Array
+					JSONArray $joMove = $joSuperNodeChild.Get( "node" );
+					$iLimit = $joMove.Size();
+
+					For ( $iIndex = 0; $iIndex < $iLimit; $iIndex += 1 )
+					{
+						$joChildren.Add( $joMove.Get( $iIndex ) );
+					}
+				}
+			};
+		};
+	};
+
+	## Attach children to super node
+	$joSuperNode.Set( "node", $joChildren );
+
+	return $joSuperNode;
+}
+
+##===========================================================================
+## GetStigSuperNodeChild
+##===========================================================================
+JSONObject COG_Base::GetStigSuperNodeChild( $loObjects, $sCollationGroup, $sLastDirection, $sKind, $sScope, $sDataKey, $oThis )
+{
+	JSONObject $joChild;
+
+	## Needs the previous parent to maintain node relationships
+	$sOrigParentRef = "";
+  if ( $oThis != NullObject )
+    $sOrigParentRef = $oThis.Ref;
+
+	if ( $sCollationGroup != "" )
+	{
+		$sGroupText = Item( $sCollationGroup, 1, 1, ";" );
+		$sGroupColor = Item( $sCollationGroup, 2, 2, ";" );
+		$sGroupExpand = Item( $sCollationGroup, 3, 3, ";" );
+
+		if ( $sGroupColor == "" ) $sGroupColor = "Yellow";
+		if ( $sGroupExpand == "" ) $sGroupExpand = "1";
+
+		## Apply group properties
+		$joChild.Set( "sText", $sGroupText );
+		$joChild.Set( "sColor", $sGroupColor );
+		$joChild.Set( "sNodeType", "childnode" );
+		$joChild.Set( "sRef", $sGroupText );
+		$joChild.Set( "sOrigParentRef", $sOrigParentRef );
+	};
+
+	JSONArray $joSubChildren;
+
+	## Add all children
+	$loObjects/
+	{
+		JSONObject $joSubChild = GetStigNode( "Standard", 1, $sLastDirection, $sKind, $sScope, $sDataKey, $oThis );
+
+		$joSubChildren.Add( $joSubChild );
+	};
+
+	$joChild.Set( "node", $joSubChildren );
+
+	return $joChild;
+}
+
+##===========================================================================
+## GetStigNode
+##===========================================================================
+JSONObject COG_Base::GetStigNode( $sFormat, $nLevel, $sDirection, $sKind, $sScope, $sDataKey, $oParent )
+{
+	JSONObject $joNode;
+
+	if ( $nLevel > 10 )
+		return $joNode;
+
+	if ( $sScope == "Interactions" and $nLevel > 2 )
+		return $joNode;
+
+	$sText = sGetData( $sDataKey );
+	$sText = Item( $sText, 1, 1, eoi );
+	$sColor = sGetFlexColor();
+
+	$sOrigParentRef = "";
+  if ( $oParent != NullObject )
+    $sOrigParentRef = $oParent.Ref;
+
+	## Apply node properties
+	$joNode.Set( "sRef", $this.Ref );
+	$joNode.Set( "sText", $sText );
+	$joNode.Set( "sColor", $sColor );
+	$joNode.Set( "sOrigParentRef", $sOrigParentRef );
+
+	if ( $sDirection == "North" )
+	{
+		## Parent nodes are above the super node
+		$joNode.Set( "sNodeType", "parentnode" );
+	}
+	else if ( $sDirection == "South" )
+	{
+		## Children nodes are below the super node
+		$joNode.Set( "sNodeType", "childnode" );
+	};
+
+	$lsLayout = lsGetNodeLayout( $sFormat, $sDirection );
+
+	$oThis = *;
+
+	JSONArray $joChildren;
+	$lsLayout/
+	{
+		$sRow = *;
+
+		$vsRowDef = split( $sRow, "|" );
+
+		$sItem = first( $vsRowDef );
+
+		$sKind = pick( $vsRowDef, 0 );
+		$sScope = pick( $vsRowDef, 1 );
+		$sDataKey = pick( $vsRowDef, 2 );
+		$sCollationGroup = pick( $vsRowDef, 3 );
+
+		if ( $sKind == "Folders" )
+		{
+			$loObjects = $this.loGetObjects( "Folders", $sScope );
+
+			if ( IsEmpty( $loObjects ) )
+				$loObjects = $this.loGetObjects( "Groups", $sScope );
+
+			if ( IsEmpty( $loObjects ) and $sScope == "Parents" )
+				$loObjects = $this.loGetObjects( "Breakdowns", $sScope );
+		}
+		else
+			$loObjects = $this.loGetObjects( $sKind, $sScope );
+
+		## Add all children and their children recursively
+		$loObjects/
+		{
+			JSONObject $joChild = GetStigNode( $sFormat, $nLevel + 1, $sDirection, $sKind, $sScope, $sDataKey, $oThis );
+
+			$joChildren.Add( $joChild );
+		};
+	};
+
+	$joNode.Set( "node", $joChildren );
+
+	return $joNode;
+}
+
+##===========================================================================
+## GetStigPage
+##===========================================================================
+void COG_Base::GetStigPage( $sContext, $sRequest, $sNodeStyle )
+{
+	$sDiagramId = "traceabilityDiagram";
+	$sSource = "StigDump.ase";
+	$sArgs = "&sStigType=supernode";
+	$sLoadingMessage = "Please wait while data is loading";
+
+	## Add styles and libraries
+	::html_header("GetPage.ase");
+	#inline
+	<script type="text/javascript">
+		var diagramId = "<%$sDiagramId%>"; // the ID for STIG-lib to locate the diagram
+		var stigRef = "<%Ref%>"; // the Ref for the root node
+		var stigShouldPrompt = true; // if the window should prompt for the Ref manually (FALSE)
+		var stigAltSource = "<%$sSource%>"; // the alternative ASE file to get JSON from
+		var stigAltArgs = "<%$sArgs%>"; // URL arguments to be passed at the end
+
+		console.log("Using diagram id", [diagramId]);
+		console.log("Using stig ref", [stigRef]);
+
+		/**
+		 * Attempt to switch the supernode to the selected node if there is one
+		 */
+		function OnShowSelected() {
+			var diagram = go.Diagram.fromDiv(diagramId);
+			var hasFoundNode = false;
+			var hasChosenNode = false;
+
+			// Iterate through selection and look for valid nodes
+			diagram.selection.each(function(node) {
+				if (!hasChosenNode && node instanceof go.Node) {
+					hasFoundNode = true;
+					console.log("Attempting to switch to node", node.data);
+
+					var sRef = node.data.embedData.sRef;
+					console.log("Node sRef stripped", [sRef]);
+
+					if (sRef != "") {
+						if (sRef.substr(0, 2) != "d|") {
+							// Not an object node
+							alert("Please select an object node to show.");
+						} else {
+							// User selected a valid node
+							hasChosenNode = true;
+
+							sUrl = "GetBodyPage.ase?oThis=" + sRef + "&sShowingWhat=Traceability&sTraceType=StigGraphical";
+							console.log("Switching to selected node", [node.data, sUrl]);
+
+							top.link( sUrl, 'body' );
+						}
+					}
+				}
+			});
+
+			if (!hasFoundNode) {
+				// No nodes were selected
+				alert("Please select a node to show")
+			}
+		}
+	</script>
+	<link rel="stylesheet" href="styles/stig.css">
+
+	<!-- jQuery -->
+	<script type="text/javascript" src="scripts/jquery.min.js"></script>
+	<!-- GoJS (Debug). Should use production version if deployed -->
+	<script type="text/javascript" src="Frameworks/GoJS/go-debug.js"></script>
+
+	<!-- STIG library -->
+	<script type="text/javascript" src="scripts/stig-lib.js"></script>
+	<script type="text/javascript" src="scripts/stig-active.js"></script>
+	#endinline;
+
+	## Menu bar with View Normally and Switch to Selected Object and Help
+	#inline
+	<table width="100%" border="0" cellpadding="0" cellmargin="0" cellspacing="0" height="15px">
+		<tr>
+			<td>
+			<span class="fakelink HelpTip" style="float:left;" onclick="window.location = this.getAttribute('sUrl');" sUrl="GetPage.ase?oThis=<%Ref%>&sShowingWhat=Traceability&sTraceType=Normal" sHelpId="Flex_View_Normally">
+				View Normally
+			</span>
+			<span style="float:left;">&nbsp;&nbsp;&nbsp;</span>
+			<span class="fakelink HelpTip" style="float:left;" onclick="OnShowSelected();" sHelpId="Flex_Switch_to_Selected_Object">
+				Switch to Selected Object
+			</span>
+			<div style="float:right; margin-right:10px; margin-top:1px;"><img src="images/<% ::sGetThemeFolder() %>/_help.png"	title="Help"  style="cursor:pointer;" onclick="top.OpenWindow(this,400,300)" href="quickEditHelp.htm" /></div>
+			</td>
+		</tr>
+	</table>
+	#endinline;
+
+	## The required elements for the diagram to work properly
+	#inline
+	<div id="stigContent">
+	  <!-- Content to be displayed during loading -->
+	  <div id="stigOverlay">
+	    <div class="stigLoader"></div>
+	    <%$sLoadingMessage%>
+	  </div>
+
+		<!-- Auto populated with the diagram canvas -->
+		<div id="<%$sDiagramId%>" class="diagramDiv"></div>
+		<!-- The context menu opened by right click -->
+		<div id="stigContextMenu">
+			<ul>
+				<li id="cxFind" onclick="cxCommand(event)"><a target="_self">Find (Ctrl-F)</a></li>
+				<li id="cxPrint" onclick="cxCommand(event)"><a target="_self">Print (Ctrl-P)</a></li>
+				<li id="cxCollapseLevel" onclick="cxCommand(event)"><a target="_self">Collapse Level</a></li>
+				<li id="cxCollapseAll" onclick="cxCommand(event)"><a target="_self">Collapse All</a></li>
+				<li id="cxExpandLevel" onclick="cxCommand(event)"><a target="_self">Expand Level</a></li>
+				<li id="cxExpandAll" onclick="cxCommand(event)"><a target="_self">Expand All</a></li>
+				<!--<li id="cxLayout" class="stigHasSubMenu"><a target="_self">Layout</a>
+					<ul id="cxLayoutSubMenu" class="stigSubMenu">
+						<li id="cxLayoutSubMenuLeftToRight" onclick="cxCommand(event)">
+							<a target="_self">Left to Right</a>
+						</li>
+						<li id="cxLayoutSubMenuRightToLeft" onclick="cxCommand(event)">
+							<a target="_self">Right to Left</a>
+						</li>
+						<li id="cxLayoutSubMenuTopToBottom" onclick="cxCommand(event)">
+							<a target="_self">Top to Bottom</a>
+						</li>
+						<li id="cxLayoutSubMenuBottomToTop" onclick="cxCommand(event)">
+							<a target="_self">Bottom to Top</a>
+						</li>
+					</ul>
+				</li>-->
+			</ul>
+		</div>
+
+		<!-- Only visible as print media -->
+		<div id="stigPrintView"></div>
+	</div>
+	#endinline;
+
+	::html_footer();
+}
