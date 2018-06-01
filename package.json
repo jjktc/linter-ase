@@ -1,0 +1,18 @@
+{
+  "name": "linter-ase",
+  "main": "./lib/linter-ase",
+  "version": "0.0.0",
+  "description": "A short description of your package",
+  "keywords": [
+  ],
+  "activationCommands": {
+    "atom-workspace": "linter-ase:toggle"
+  },
+  "repository": "https://github.com/jjktc/linter-ase",
+  "license": "CCPLA",
+  "engines": {
+    "atom": ">=1.0.0 <2.0.0"
+  },
+  "dependencies": {
+  }
+}

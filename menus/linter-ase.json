@@ -1,0 +1,26 @@
+{
+  "context-menu": {
+    "atom-text-editor": [
+      {
+        "label": "Toggle linter-ase",
+        "command": "linter-ase:toggle"
+      }
+    ]
+  },
+  "menu": [
+    {
+      "label": "Packages",
+      "submenu": [
+        {
+          "label": "linter-ase",
+          "submenu": [
+            {
+              "label": "Toggle",
+              "command": "linter-ase:toggle"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
