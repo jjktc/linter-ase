@@ -26,6 +26,12 @@ JSONArray
 (
 	()
 )
+[
+	[]
+]
+{
+	{}
+}
 
 ## BAD CASES
 ## Constants
@@ -43,3 +49,7 @@ $test+ $test
 ## Matching
 )
 (
+]
+[
+}
+{
