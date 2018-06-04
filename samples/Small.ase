@@ -22,6 +22,10 @@ JSONArray
 +=
 ++
 
+## Matching
+(
+	()
+)
 
 ## BAD CASES
 ## Constants
@@ -34,4 +38,8 @@ JSONARRay
 ## Spacing
 ""+
 $test+ $test
-)+(
+(+)
+
+## Matching
+)
+(
