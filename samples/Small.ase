@@ -9,3 +9,29 @@ variant COG_Base::GetHelpTreeText( $sTitle, $sUrl )
 	$sRetval += "</span>";
 	return $sRetval;
 }
+
+## GOOD CASES
+## Constants
+eoi
+NullObject
+JSONObject,
+JSONArray
+
+## Spacing
++
++=
+++
+
+
+## BAD CASES
+## Constants
+EOI
+NULLOBJECT
+JSONOBJECT
+jsonObject
+JSONARRay
+
+## Spacing
+""+
+$test+ $test
+)+(
