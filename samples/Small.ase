@@ -1,15 +1,3 @@
-##===========================================================================
-## sGetFakeText
-##===========================================================================
-variant COG_Base::GetHelpTreeText( $sTitle, $sUrl )
-{
-
-	$sRetval = "<span class='link' target='body' href='" + $sUrl + "'>";
-	$sRetval += $sTitle;
-	$sRetval += "</span>";
-	return $sRetval;
-}
-
 ## GOOD CASES
 ## Constants
 eoi

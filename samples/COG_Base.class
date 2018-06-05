@@ -74,7 +74,7 @@ void COG_Base::AccumObjects( $sRequest, $nLevel )
 void COG_Base::AccumObjects1( $sRequest, $nLevel )
 {
 	## get the first level and remember the rest
-	$sCur	= Item( $sRequest, 1, 1, "/" );
+	$sCur = Item( $sRequest, 1, 1, "/" );
 	$sNext  = Item( $sRequest, 2, 99999999, "/" );
 
 	## let this level split up the "&"
@@ -241,7 +241,7 @@ variant COG_Base::loAccumObjects3( $sItem )
 		if ( $sKindTmp == "Custom" )
 			throw( "Cannot use a custom loGetObjects call inside a custom request." );
 
-		$sScopeTmp = $sScopeTmp=="" ? "Children" : $sScopeTmp;
+		$sScopeTmp = $sScopeTmp == "" ? "Children" : $sScopeTmp;
 
 		$loObjects << $this.loGetObjects( $sKindTmp, $sScopeTmp );
 
@@ -249,7 +249,7 @@ variant COG_Base::loAccumObjects3( $sItem )
 		if ( $sFilterTmp != "" )
 		{
 			## Add class if not already there
-			if  (itemcount($sFilterTmp,EOI) < 2)
+			if  (itemcount($sFilterTmp,eoi) < 2)
 			{
 				$sClassName = $this.sGetClassNameFromRequest( $sKindTmp );
 				$sFilterRequest = $sFilterTmp + eoi + $sClassName;
@@ -281,7 +281,7 @@ variant COG_Base::sFakeCenterLink( $sText, $sKey, $sShowingWhat, $sCssClass )
 
 	$sResponse =  "<" + "span class='" + $sCssClass + "' target='CenterPage' bUpdateText='true' ";
 	$sResponse += " subscription='~ReqDisplayModeChanged~' href='GetFakePage.ase?oThis=" + $sRef;
-	$sResponse += "&sShowingWhat="+ $sShowingWhat + "&sKey=" + $sKey;
+	$sResponse += "&sShowingWhat=" + $sShowingWhat + "&sKey=" + $sKey;
 	if( $sKey == "Preferences" )
 		$sResponse += "&bUpdateTxn=true";
 
@@ -345,7 +345,7 @@ variant COG_Base::sGetRichEditableText( $sRequest, $bEdit, $sTagAttrs, $sKindOfC
 	else
 		$bIsEditable = bIsEditable();
 
-	if( $bEdit==false or $bExport or NOT $bIsEditable ){
+	if( $bEdit == false or $bExport or NOT $bIsEditable ){
 		## RegEx finds and removes the dblclick event from any embedded apps. Searches for the string
 		## ondblclick="javascript:if(window.oGetTop)oGetTop().OpenExtApp( '<%$sAppLink%>', 'ExtAppInfo', false )"
 		## where <%$sAppLink%> is a value we do not know so we use [^']* for any characters except the end quote.
@@ -365,7 +365,7 @@ variant COG_Base::sGetRichEditableText( $sRequest, $bEdit, $sTagAttrs, $sKindOfC
 	{
 		$sIsPLE = Lower( CStr( $this.bIsPLE() ) );
 		## otherwise, return a nice tag
-		$sTemp =	"<div class='RichEditableText' contentEditable='true' " + $sTagAttrs + " sRef='" + $sRef + "' ";
+		$sTemp = "<div class='RichEditableText' contentEditable='true' " + $sTagAttrs + " sRef='" + $sRef + "' ";
 		$sTemp +=	"bIsPLE='" + $sIsPLE + "' sItem='" + HTMLEncode($sRequest) + "' sValue='' >";
 		$sTemp +=	$sResponse + "</div>";
 	};
@@ -377,7 +377,7 @@ variant COG_Base::sGetRichEditableText( $sRequest, $bEdit, $sTagAttrs, $sKindOfC
 		$sValue = $sTemp;
 		$sNameID = 'sGetName/ID'();
 		$sClassname = classname;
-		$sSafeRequest = Replace( $sRequest, EOI, "EOI" );
+		$sSafeRequest = Replace( $sRequest, eoi, "EOI" );
 		$sASE = "sGetRichEditableText(""" + $sRequest + """, """ + $bEdit + """, """ + $sTagAttrs + """, """ + $sKindOfChange + """, """ + $sHints + """ );";
 		$sURLParams = "";
 		if( $sExport != Null )
@@ -709,7 +709,7 @@ variant COG_Base::loSortObjects_String( $loObjects, $sSortRequest)
 
 			};
 
-			$sKey = Join( $lsCurr, EOI );
+			$sKey = Join( $lsCurr, eoi );
 			$lsKeys << $sKey;
 		};
 
@@ -1080,7 +1080,7 @@ void COG_Base::GetStatusSummaryStyle()
 ##===================================================================================================================
 variant COG_Base::oFindIndirectObject( $sKey )
 {
-	return NULLOBJECT;
+	return NullObject;
 }
 
 ##===================================================================================================================
@@ -1088,10 +1088,10 @@ variant COG_Base::oFindIndirectObject( $sKey )
 ##
 ## Returns either null object or the subItem with the given sSubType
 ##===================================================================================================================
-variant COG_Base::bIsAvailable( $obj )
+variant COG_Base::bIsAvailable( $oObj )
 {
 	## check for nullobject
-	if ( $obj == NULLOBJECT )
+	if ( $oObj == NullObject )
 	{
 		$bValid = false;
 	}
@@ -1099,10 +1099,10 @@ variant COG_Base::bIsAvailable( $obj )
 	{
 		try
 		{
-			$iOid = $obj.iOid;
+			$iOid = $oObj.iOid;
 			$bValid = true;
 		}
-		catch( $err )
+		catch( $oObj )
 		{
 			$bValid = false;
 		};
@@ -1229,12 +1229,12 @@ void COG_Base::GetFakeFlexTableEntry(JSONObject $joData, $vsCols, $vsCellStyles,
 			{
 				$sChoiceKey = $joData.Get( "ChoiceKey|" + $sRequest );
 				if( $sChoiceKey != NULL )
-					$oThis.DropList( $sRequest + EOI + $sKey, $sChoiceKey, "Value here..." );
+					$oThis.DropList( $sRequest + eoi + $sKey, $sChoiceKey, "Value here..." );
 				else
 				{
 					SetRequest( "bMakeEditable", $bMakeEditable );
 					SetRequest( "sTags", $sTags );
-					$oThis.GetFakeSnippet( $sRequest + EOI + $sKey );
+					$oThis.GetFakeSnippet( $sRequest + eoi + $sKey );
 				};
 			}
 			else
@@ -1328,10 +1328,10 @@ void COG_Base::GetFakeSnippet_Builtin($sRequest)
 {
 	$sSupData = "";
 
-	if( find( $sRequest, EOI ) != -1 )
+	if( find( $sRequest, eoi ) != -1 )
 	{
-		$sSupData = Item( $sRequest, 2, 2, EOI );
-		$sRequest = Item( $sRequest, 1, 1, EOI );
+		$sSupData = Item( $sRequest, 2, 2, eoi );
+		$sRequest = Item( $sRequest, 1, 1, eoi );
 	};
 
 	$sSubRequest = "";
@@ -1410,7 +1410,7 @@ void COG_Base::GetFakeSnippet_Builtin($sRequest)
 			break;
 		default:
 			if( $sSupData != "" )
-				$sRequest += EOI + $sSupData;
+				$sRequest += eoi + $sSupData;
 
 			$bMakeEditable = GetRequest( "bMakeEditable");
 			$sTags = GetRequest( "sTags" );
@@ -1486,7 +1486,7 @@ variant COG_Base::lsGetCustomFilterList( $sRequest )
 
 	$sClass = COG_Base::sGetClassNameFromRequest( $sRequest );
 
-	if( $this != NULL AND $this != NULLOBJECT ) {
+	if( $this != NULL AND $this != NullObject ) {
 		$oRegistrar = oGetLocalRegistrar();
 	} else {
 		$oRegistrar = AseRegistrar::oGet_s();
@@ -1500,7 +1500,7 @@ variant COG_Base::lsGetCustomFilterList( $sRequest )
 	$loCustomFilters/{
 		$sName = *.sName;
 		$sDescription = *.sDescription;
-		$lsRetval << $sName + EOI + $sClass + "|" + $sDescription;
+		$lsRetval << $sName + eoi + $sClass + "|" + $sDescription;
 	};
 
 	## add in namespace filters
@@ -1536,7 +1536,7 @@ variant COG_Base::GetFilter( $sRequest )
 	## first, see it the customer has created a custom section for this
 	$oAseItem = oGetAseBMItem( "AseFilter", $sRequest );
 
-	if ( $oAseItem != NULLOBJECT )
+	if ( $oAseItem != NullObject )
 	{
 		$lsFilters = CList();
 		$sCode = $oAseItem.GetAttr( "sCode" );
@@ -1550,19 +1550,19 @@ variant COG_Base::GetFilter( $sRequest )
         $sHandler = NameSpace_sGetRequestHandler($sRequest, "filter");
 
         if ($sHandler != null) {
-            $sClass = itemcount($sRequest,EOI)>1?item($sRequest,2,2,EOI):"";
+            $sClass = itemcount($sRequest,eoi)>1?item($sRequest,2,2,eoi):"";
             $lsResponse = CList();
 
             ## split this into it's pieces (function, args, version)
-        	$sFunction = Item($sHandler,1,1,EOI);
-    		$sArgs = Item($sHandler,2,2,EOI);
-	   		$sVersion = Item($sHandler,3,3,EOI);
+        	$sFunction = Item($sHandler,1,1,eoi);
+    		$sArgs = Item($sHandler,2,2,eoi);
+	   		$sVersion = Item($sHandler,3,3,eoi);
 
-        	## check for an EOI in the request, which is a classname
+        	## check for an eoi in the request, which is a classname
         	$sClass = "";
-        	if (itemcount($sRequest, EOI) > 1) {
-				$sClass = item($sRequest, 2, 2, EOI);
-				$sRequest = item($sRequest, 1, 1, EOI);
+        	if (itemcount($sRequest, eoi) > 1) {
+				$sClass = item($sRequest, 2, 2, eoi);
+				$sRequest = item($sRequest, 1, 1, eoi);
 				$sFunction = $sClass + "::" + $sFunction;
 
 				## modify the arguments
@@ -1580,7 +1580,7 @@ variant COG_Base::GetFilter( $sRequest )
             return $lsResponse;
         } else {
 			## If EOI separated only pass the first part since the built in filters do not expect a class
-			if (ItemCount($sRequest,EOI) >1) $sRequest = Item($sRequest,1,1,EOI);
+			if (ItemCount($sRequest,eoi) >1) $sRequest = Item($sRequest,1,1,eoi);
 			return GetFilter_Builtin( $sRequest );
 		};
 	};
@@ -1601,7 +1601,7 @@ variant COG_Base::GetSort( $sRequest )
 	## first, see it the customer has created a custom section for this
 	$oAseItem = oGetAseBMItem( "AseSort", $sRequest );
 
-	if ( $oAseItem != NULLOBJECT )
+	if ( $oAseItem != NullObject )
 	{
 		$sSortDef = "";
 		$sCode = $oAseItem.GetAttr( "sCode" );
@@ -1614,17 +1614,17 @@ variant COG_Base::GetSort( $sRequest )
 
         if ($sHandler != null) {
         	## split this into it's pieces (function, args, version)
-        	$sFunction = Item($sHandler,1,1,EOI);
-    		$sArgs = Item($sHandler,2,2,EOI);
-	   		$sVersion = Item($sHandler,3,3,EOI);
+        	$sFunction = Item($sHandler,1,1,eoi);
+    		$sArgs = Item($sHandler,2,2,eoi);
+	   		$sVersion = Item($sHandler,3,3,eoi);
 
 	   		$sResponse = "";
 
         	## check for an EOI in the request, which is a classname
         	$sClass = "";
-        	if (itemcount($sRequest, EOI) > 1) {
-				$sClass = item($sRequest, 2, 2, EOI);
-				$sRequest = item($sRequest, 1, 1, EOI);
+        	if (itemcount($sRequest, eoi) > 1) {
+				$sClass = item($sRequest, 2, 2, eoi);
+				$sRequest = item($sRequest, 1, 1, eoi);
 				$sFunction = $sClass + "::" + $sFunction;
 
 				## modify the arguments
@@ -1687,7 +1687,7 @@ variant COG_Base::lsGetCustomSortList( $sRequest )
 	$loCustomSorts/
 	{
 		$sName = *.sName;
-		$lsRetval << $sName + "|" + $sName + EOI + $sClass;
+		$lsRetval << $sName + "|" + $sName + eoi + $sClass;
 	};
 
 	## add in namespace sorts
@@ -1801,7 +1801,7 @@ variant COG_Base::sGetDecoratedText($sRequest,$bEdit,$sTagAttrs, $sContext)
 	if($sRequest == "sDescription" And Not $bModTips)
 		$sDisplayValue = HTMLEncode( $sDisplayValue );
 
-	$class = "class = ''";
+	$sClass = "class = ''";
 
 	$sDecorations = sGetMarkupDecorations( $sContext );
 	$sRefs = item( $sDecorations, 1, 1, eoi );
@@ -1878,7 +1878,7 @@ variant COG_Base::sGetDecoratedText($sRequest,$bEdit,$sTagAttrs, $sContext)
 		$sValue = $sResponse;
 		$sNameID = 'sGetName/ID'();
 		$sClassname = classname;
-		$sSafeRequest = Replace( $sRequest, EOI, "EOI" );
+		$sSafeRequest = Replace( $sRequest, eoi, "EOI" );
 		$sASE = "sGetDecoratedText(""" + $sRequest + """, """ + $bEdit + """, """ + $sTagAttrs + """, """ + $sContext + """ );";
 		$sURLParams = "";
 		if( $sExport != "" )
@@ -2143,7 +2143,7 @@ variant COG_Base::loGetObjects_Builtin( $sRequest, $sScope )
 	}
 	else if( Upper( $sRequest ) == "PROCESSTEMPLATES" )
 	{
-		$loMembers = /'Data Vault 1/'/COG_WorkflowTaskTemplate[ oParent == NULLOBJECT ];
+		$loMembers = /'Data Vault 1/'/COG_WorkflowTaskTemplate[ oParent == NullObject ];
 		$loMembers = loAlphaSortByDescription( $loMembers );
 	}
 	else
@@ -2370,7 +2370,7 @@ void COG_Base::GetFlexMindEntry( $sTag, $nLevels, $sTitle, $loChildren, $sContex
 ## accessor functions: sGetData( $sRequest, $bMakeEditable ) and SetData( $sRequest, $Value ).
 ## Both are defined on COG_Base.
 ##===========================================================================
-variant COG_Base::sGetSetData( $sRequest, $bSettingValue, $Value, $bGetDisplay )
+variant COG_Base::sGetSetData( $sRequest, $bSettingValue, $sValue, $bGetDisplay )
 {
 	$sResponse = "";
 
@@ -2382,10 +2382,10 @@ variant COG_Base::sGetSetData( $sRequest, $bSettingValue, $Value, $bGetDisplay )
 	$sSubRequest = "";
 
 	## Strip out inner request if any.
-	if( find( $sRequest,EOI ) != -1 )
+	if( find( $sRequest,eoi ) != -1 )
 	{
-		$sSubRequest	= Item( $sRequest, 2, 9999, EOI );
-		$sRequest		= Item( $sRequest, 1, 1, EOI );
+		$sSubRequest	= Item( $sRequest, 2, 9999, eoi );
+		$sRequest		= Item( $sRequest, 1, 1, eoi );
 	};
 
 	if ( $bSettingValue )
@@ -2399,7 +2399,7 @@ variant COG_Base::sGetSetData( $sRequest, $bSettingValue, $Value, $bGetDisplay )
 				$sKey = "s" + $sRequest + "s";
 
 				## add or remove this item from the user's bookmarks
-				$bAdd = $Value == "true";
+				$bAdd = $sValue == "true";
 
 				$sItems = $me.oPerson.sGetData( $sKey );
 
@@ -2461,7 +2461,7 @@ variant COG_Base::sGetSetData( $sRequest, $bSettingValue, $Value, $bGetDisplay )
 
 				try
 				{
-					$sResponse = sSetData_b( $sOriginal, $Value );
+					$sResponse = sSetData_b( $sOriginal, $sValue );
 				}
 				catch( $sResponse )
 				{
@@ -2504,8 +2504,8 @@ variant COG_Base::sGetSetData( $sRequest, $bSettingValue, $Value, $bGetDisplay )
 				$sResponse = "";
 				break;
 			case "nAuthenticationFlag":
-				$sDataRequest = Item( $sSubRequest, 1, 1, EOI );
-				$sKindOfChange = Item( $sSubRequest, 2, 2, EOI );
+				$sDataRequest = Item( $sSubRequest, 1, 1, eoi );
+				$sKindOfChange = Item( $sSubRequest, 2, 2, eoi );
 				$sResponse = nGetAuthenticationFlag( $sDataRequest, $sKindOfChange );
 				break;
 			case "sExternalURLLink":
@@ -2531,11 +2531,11 @@ variant COG_Base::sGetSetData( $sRequest, $bSettingValue, $Value, $bGetDisplay )
 			break;
 
 			case "iNumberOfObjects":
-				if ( itemcount( $sSubRequest, EOI ) == 2 )
+				if ( itemcount( $sSubRequest, eoi ) == 2 )
 				{
 					## the subrequest should have a KIND and SCOPE
-					$sKind = Item( $sSubRequest, 1, 1, EOI );
-					$sScope = Item( $sSubRequest, 2, 2, EOI );
+					$sKind = Item( $sSubRequest, 1, 1, eoi );
+					$sScope = Item( $sSubRequest, 2, 2, eoi );
 
 					## get the objects
 					$loObjects = loGetObjects( $sKind, $sScope );
@@ -3141,12 +3141,12 @@ variant COG_Base::GetChoices_Builtin( $sShowingWhat )
 				if( $bXML AND $sLastOrg == Ref )
 					$sName += "(DEFAULT)";
 
-				$lsResponse << $sName + EOI + Replace( Ref, "|", "-" );
+				$lsResponse << $sName + eoi + Replace( Ref, "|", "-" );
 			};
 
 			if ( $bXML AND ISEmpty( $loOrgs ) ) {
 				$oCorporation = SSC_SystemOrg::oGetCorporation_s();
-				$lsResponse << $oCorporation.sDescription + "(DEFAULT)" + EOI + Replace( $oCorporation.Ref, "|", "-" );
+				$lsResponse << $oCorporation.sDescription + "(DEFAULT)" + eoi + Replace( $oCorporation.Ref, "|", "-" );
 			};
 
 			$sResponse = join( $lsResponse,  "|" );
@@ -3172,7 +3172,7 @@ variant COG_Base::GetChoices_Builtin( $sShowingWhat )
 					$sName += "(DEFAULT)";
 				};
 
-				$lsResponse << $sName + EOI + Replace( Ref, "|", "-" );
+				$lsResponse << $sName + eoi + Replace( Ref, "|", "-" );
 			};
 			$sResponse = join( $lsResponse,  "|" );
 			break;
@@ -3197,7 +3197,7 @@ variant COG_Base::GetChoices_Builtin( $sShowingWhat )
 				};
 				$sLastKey = $sKey;
 
-				$lsResponse << $sDescription + EOI + Replace( Ref, "|", "-" );
+				$lsResponse << $sDescription + eoi + Replace( Ref, "|", "-" );
 			};
 			$sResponse = join( $lsResponse,  "|" );
 
@@ -3254,7 +3254,7 @@ variant COG_Base::lsFormatObjectsAsChoices_s( $sChoiceRequest, $loObjects )
 				if ( className == "COG_Group" ) {
 					$sPrefix += "G:";
 				};
-				$lsObjects << $sPrefix + sGetName() + EOI + Replace( Ref, "|", "-" );
+				$lsObjects << $sPrefix + sGetName() + eoi + Replace( Ref, "|", "-" );
 			};
 			break;
 		case "LoginUsers":
@@ -3266,13 +3266,13 @@ variant COG_Base::lsFormatObjectsAsChoices_s( $sChoiceRequest, $loObjects )
 					$sName += "G:";
 				};
 				$sName += sGetName();
-				$lsObjects << $sName + EOI + $sName;
+				$lsObjects << $sName + eoi + $sName;
 			};
 			break;
 		case "ConfigUsers":
 		case "ConfigAuthors":
 			$loObjects[ * kindof "COG_GroupedObj" ]/{
-				$lsObjects << sGetName() + EOI + sGetLoginName();
+				$lsObjects << sGetName() + eoi + sGetLoginName();
 			};
 			break;
 	};
@@ -3286,18 +3286,18 @@ variant COG_Base::lsGetChoiceRequests_Builtin()
 {
 	$lsRetval = CList();
 
-	$lsRetval << "PeopleAndGroups" + EOI + "PeopleAndGroups";
-	$lsRetval << "UserGroups" + EOI + "UserGroups";
-	$lsRetval << "People" + EOI + "People";
-	$lsRetval << "LoginUsers" + EOI + "LoginUsers";
-	$lsRetval << "Owners" + EOI + "Owners";
-	$lsRetval << "Date" + EOI + "Date";
-	$lsRetval << "Time" + EOI + "Time";
-	$lsRetval << "Importance" + EOI + "Importance";
-	$lsRetval << "Effort" + EOI + "Effort";
-	$lsRetval << "Units" + EOI + "Units";
-	$lsRetval << "Numbers" + EOI + "Numbers";
-	$lsRetval << "Status" + EOI + "Status";
+	$lsRetval << "PeopleAndGroups" + eoi + "PeopleAndGroups";
+	$lsRetval << "UserGroups" + eoi + "UserGroups";
+	$lsRetval << "People" + eoi + "People";
+	$lsRetval << "LoginUsers" + eoi + "LoginUsers";
+	$lsRetval << "Owners" + eoi + "Owners";
+	$lsRetval << "Date" + eoi + "Date";
+	$lsRetval << "Time" + eoi + "Time";
+	$lsRetval << "Importance" + eoi + "Importance";
+	$lsRetval << "Effort" + eoi + "Effort";
+	$lsRetval << "Units" + eoi + "Units";
+	$lsRetval << "Numbers" + eoi + "Numbers";
+	$lsRetval << "Status" + eoi + "Status";
 
 	$lsRetval << super::lsGetChoiceRequests_Builtin();
 
@@ -3321,8 +3321,8 @@ void COG_Base::GetAdhocChartSimple( $sType, $sTitle, $sCustomRequest, $sAttribut
 	$lsBarLabels = CList();
 	$lsBars/
 	{
-		$nItemcount = Itemcount( *, EOI );
-		$lsBarLabels << Item( *, $nItemcount, $nItemcount, EOI );
+		$nItemcount = Itemcount( *, eoi );
+		$lsBarLabels << Item( *, $nItemcount, $nItemcount, eoi );
 	};
 
 	$sBarLabels = urlencode( join( $lsBarLabels,  "|" ));
@@ -3410,7 +3410,7 @@ void COG_Base::GetAdhocChartHSBar( $sTitle, $sCustomRequest, $sCustomRequest2, $
 		## capture the object's name
 		$sItemLabel = "";
 		if ( sGetTagType() == "SEC" )
-			$sItemLabel =  " "+ sGetData( "sSectionNumber" );
+			$sItemLabel =  " " + sGetData( "sSectionNumber" );
 		$sItemLabel = sGetDescriptionWithId() + $sItemLabel;
 		$lsBarLabels << urlencode( trim( $sItemLabel ) );
 
@@ -3581,8 +3581,8 @@ JSONArray COG_Base::jaGetTableRows( $sRequest ) {
 		$joData = ::newJSONObject();
 		$lmRow/
 		{
-			$value = *;
-			$joData.Set($iterkey, $value);
+			$oValue = *;
+			$joData.Set($iterkey, $oValue);
 		};
 		$jaTableRows.Add($joData);
 	};
@@ -3622,8 +3622,8 @@ void COG_Base::GetFTAFormat($sContext, $sShowing, $sNodeStyle, $lsRiskTypes) {
 					$oThis = *;
 					$lsRiskTypes/
 					{
-						$sDisplay = htmlencode(Item( *, 1, 1, EOI ));
-						$sValue = htmlencode(Item( *, 2, 2, EOI ));
+						$sDisplay = htmlencode(Item( *, 1, 1, eoi ));
+						$sValue = htmlencode(Item( *, 2, 2, eoi ));
 						#inline
 						<option sName='<%$sDisplay%>' sValue='<%$sValue%>'/>
 						#endinline;
