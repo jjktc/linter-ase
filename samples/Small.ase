@@ -1,7 +1,7 @@
 ## GOOD CASES
 ## Constants
 eoi
-NullObject
+nullobject
 JSONObject,
 JSONArray
 
