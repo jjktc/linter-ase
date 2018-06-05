@@ -21,6 +21,7 @@ JSONArray
 +
 +=
 ++
+$iVar = $iA + $iB;
 
 ## Matching
 (
@@ -33,6 +34,11 @@ JSONArray
 	{}
 }
 
+## 1) this should not be linted
+#****************************************************************************************************
+ * 2) this should not be linted either
+*****************************************************************************************************#
+
 ## BAD CASES
 ## Constants
 EOI
@@ -42,7 +48,7 @@ jsonObject
 JSONARRay
 
 ## Spacing
-""+
+$sVar= $a +$b
 $test+ $test
 (+)
 
