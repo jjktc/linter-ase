@@ -39,6 +39,12 @@ $iVar = $iA + $iB;
  * 2) this should not be linted either
 *****************************************************************************************************#
 
+## Hungarian Notation
+$joNode;
+$sName = $sParentRef + $sRef;
+$this;
+$Ref;
+
 ## BAD CASES
 ## Constants
 EOI
@@ -59,3 +65,7 @@ $test+ $test
 [
 }
 {
+
+## Hungarian Notation
+$jonode $JONODE
+$Name = $ParentRef + $Ref;
