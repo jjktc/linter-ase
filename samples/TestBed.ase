@@ -7,5 +7,24 @@ variant COG_Base::GetHelpTreeText( $sTitle, $sUrl )
 	$sRetval = "<span class='link' target='body' href='" + $sUrl + "'>";
 	$sRetval += $sTitle;
 	$sRetval += "</span>";
+
+	if ($BadVar AND $sGoodVar== "some string")
+	{
+
+		if ($bGoodVar == True)
+		{
+			JSONObject $joMyVar;
+		}
+		else if ($bCondition1 or $bCondition2)
+		{
+			$sMyString = "some text" + EOI + "some more text";
+		}
+		else
+		{
+
+		
+
+	};
+
 	return $sRetval;
 }
