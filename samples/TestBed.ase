@@ -22,7 +22,11 @@ variant COG_Base::GetHelpTreeText( $sTitle, $sUrl )
 		else
 		{
 
+<<<<<<< HEAD
 			## } This should not effect the linting
+=======
+		
+>>>>>>> b56eb1f02a2c0e55bbb240203336e95e39a2cf3e
 
 	};
 
