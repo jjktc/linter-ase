@@ -8,14 +8,14 @@ variant COG_Base::GetHelpTreeText( $sTitle, $sUrl )
 	$sRetval += $sTitle;
 	$sRetval += "</span>";
 
-	if ($BadVar AND $sGoodVar== "some string")
+	if ( $BadVar AND $sGoodVar== "some string" )
 	{
 
-		if ($bGoodVar == True)
+		if ( $bGoodVar == True )
 		{
 			JSONObject $joMyVar;
 		}
-		else if ($bCondition1 or $bCondition2)
+		else if ( $bCondition1 or $bCondition2 )
 		{
 			$sMyString = "some text" + EOI + "some more text";
 		}
