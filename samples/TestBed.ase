@@ -28,3 +28,14 @@ variant COG_Base::GetHelpTreeText( $sTitle, $sUrl )
 
 	return $sRetval;
 }
+
+void MyFunction($myVar )
+{
+	$sNewVar = first($otherVar);
+	$sNewVar = last( $otherVar );
+}
+
+void MyOtherFunction()
+{
+
+}
