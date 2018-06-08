@@ -2,7 +2,7 @@
 `ASE` linter for Atom editor with automatic solutions, messages, and mini-map support, fully compatible with the `language-ase` grammar package and syntax highlighting.
 
 <p align="center" style="drop-shadow: 2px">
-  <img width="100%" height="auto" src="window.png"/>
+  <img width="100%" height="auto" src="window.PNG"/>
 </p>
 
 ## Installation
