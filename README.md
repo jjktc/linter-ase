@@ -16,8 +16,6 @@
 ## Dependencies
 - `language-ase`: Allows the linter to recognize ASE specific code
 - `linter`: Provides a framework to render information text
-- `minimap`: (Optional) Adds a minimap to the side panel
-- `minimap-linter`: (Optional) Adds linting to the minimap
 
 ## Features
 - Linting for various errors and warnings:
@@ -32,10 +30,6 @@
 
 ## Recommended Packages
 Atom has some really fantastic Open Source packages that pair nicely.
-- atom-ternjs: adds JavaScript code intelligence including jQuery (dependency: autocomplete-plus)
 - file-icons: adds easily recognizable icons for all commonly used file types, including ASE
 - minimap: adds Sublime-Text style minimap to right hand side to quickly recognize code chunks
-- pigments: auto highlights color codes in their respective color
-- linter: can add additional autocomplete capabilities
-- language-ase: adds linting capabilities to ASE (dependency: linter, language-ase)
 - minimap-linter: adds linting onto the minimap (dependency: linter, minimap)
